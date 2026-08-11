@@ -188,6 +188,52 @@
         return l
     end
 
+    -- ── animated box background: near-black base + slow-drifting purple
+    -- glows (UIGradient circles, no image assets) clipped INSIDE the card,
+    -- so each UI's OWN background feels alive. Frames sit at ZIndex 0 —
+    -- always under the box's content. The drift loops stop when the box dies.
+    local function addBoxAmbient(box)
+        box.ClipsDescendants = true
+        local layer = Instance.new('Frame')
+        layer.Name = 'BoxAmbient'
+        layer.Size = UDim2.new(1, 0, 1, 0)
+        layer.BackgroundTransparency = 1
+        layer.BorderSizePixel = 0
+        layer.ZIndex = 0
+        layer.Parent = box
+        local specs = {
+            { theme.accent,  UDim2.new(0.8, 0, 0.8, 0),  UDim2.new(0.08, 0, 0.05, 0), UDim2.new(0.35, 0, 0.28, 0), 6, 18, 0.90 },
+            { theme.accent2, UDim2.new(0.65, 0, 0.65, 0), UDim2.new(0.88, 0, 0.08, 0), UDim2.new(0.62, 0, 0.32, 0), 7, -12, 0.93 },
+            { theme.accent,  UDim2.new(0.55, 0, 0.55, 0), UDim2.new(0.7, 0, 0.88, 0),  UDim2.new(0.42, 0, 0.62, 0), 8, 30, 0.94 },
+        }
+        for _, sp in ipairs(specs) do
+            local g = Instance.new('Frame')
+            g.Size = sp[2]
+            g.AnchorPoint = Vector2.new(0.5, 0.5)
+            g.Position = sp[3]
+            g.BackgroundColor3 = sp[1]
+            g.BackgroundTransparency = sp[7]
+            g.BorderSizePixel = 0
+            g.Rotation = sp[6]
+            g.ZIndex = 0
+            corner(g, 999)
+            local grad = Instance.new('UIGradient')
+            grad.Rotation = 90
+            grad.Color = ColorSequence.new(sp[1], theme.dark)
+            grad.Parent = g
+            g.Parent = layer
+            local from, to, dur = sp[3], sp[4], sp[5]
+            task.spawn(function()
+                while g.Parent do
+                    tween(g, { Position = to }, dur, Enum.EasingStyle.Sine)
+                    task.wait(dur)
+                    tween(g, { Position = from }, dur, Enum.EasingStyle.Sine)
+                    task.wait(dur)
+                end
+            end)
+        end
+    end
+
     local Options = {}
     PongiUI.Options = Options
     PongiUI.ToggleKeybind = Enum.KeyCode.RightControl
@@ -204,49 +250,6 @@
     -- RobloxGui/PlayerGui render full-screen; the random name hides it in
     -- the explorer anyway.
     ScreenGui.Parent = CoreGui:FindFirstChild('RobloxGui') or CoreGui
-
-    -- ── animated ambient background: near-black base + slow-drifting purple
-    -- glows (no image assets — UIGradient circles) so the backdrop feels
-    -- alive. Sits at ZIndex 0, always BEHIND the window (ZIndex 1+).
-    local BgAmbient = Instance.new('Frame')
-    BgAmbient.Name = 'BgAmbient'
-    BgAmbient.Size = UDim2.new(1, 0, 1, 0)
-    BgAmbient.BackgroundColor3 = theme.dark
-    BgAmbient.BorderSizePixel = 0
-    BgAmbient.ZIndex = 0
-    BgAmbient.Parent = ScreenGui
-
-    local function addGlow(color, size, from, to, dur, rot, transp)
-        local g = Instance.new('Frame')
-        g.Size = size
-        g.AnchorPoint = Vector2.new(0.5, 0.5)
-        g.Position = from
-        g.BackgroundColor3 = color
-        g.BackgroundTransparency = transp or 0.9
-        g.BorderSizePixel = 0
-        g.Rotation = rot or 0
-        g.ZIndex = 0
-        corner(g, 999)  -- circle
-        local grad = Instance.new('UIGradient')
-        grad.Rotation = 90
-        grad.Color = ColorSequence.new(color, theme.dark)
-        grad.Parent = g
-        g.Parent = BgAmbient
-        -- drift forever: ease back and forth so the glows slowly wander
-        task.spawn(function()
-            while true do
-                tween(g, { Position = to }, dur, Enum.EasingStyle.Sine)
-                task.wait(dur)
-                tween(g, { Position = from }, dur, Enum.EasingStyle.Sine)
-                task.wait(dur)
-            end
-        end)
-        return g
-    end
-    -- three glows, different corners, sizes and drift speeds
-    addGlow(theme.accent,  UDim2.fromOffset(460, 460), UDim2.new(0.12, 0, 0.12, 0), UDim2.new(0.3, 0, 0.24, 0), 6, 18, 0.91)
-    addGlow(theme.accent2, UDim2.fromOffset(380, 380), UDim2.new(0.88, 0, 0.15, 0), UDim2.new(0.7, 0, 0.28, 0), 7, -12, 0.93)
-    addGlow(theme.accent,  UDim2.fromOffset(340, 340), UDim2.new(0.72, 0, 0.85, 0), UDim2.new(0.55, 0, 0.68, 0), 8, 30, 0.94)
 
     -- notification stack: top-right corner of the CLIENT (never the window)
     local NotifyArea = Instance.new('Frame')
@@ -338,6 +341,7 @@
         corner(root, 10)
         stroke(root, theme.outline, 1)
         root.Parent = ScreenGui
+        addBoxAmbient(root)  -- animated purple glows clipped inside the window
         if LoadingActive then root.Visible = false end
 
         -- compact top bar: the smallest height that still fits the icon
@@ -1466,6 +1470,7 @@
         stroke(box, theme.outline, 1)
         box.ZIndex = 101
         box.Parent = overlay
+        addBoxAmbient(box)  -- animated purple glows clipped inside the loading card
 
         local logo = makeIcon(info.Icon or 'user', 46)
         logo.Position = UDim2.fromOffset(18, 18)
@@ -1594,6 +1599,7 @@
         box.BorderSizePixel = 0
         corner(box, 10)
         stroke(box, theme.outline, 1)
+        addBoxAmbient(box)  -- animated purple glows clipped inside the key card
 
         local logo = makeIcon(info.Icon or 'user', 46)
         logo.Position = UDim2.fromOffset(18, 18)
