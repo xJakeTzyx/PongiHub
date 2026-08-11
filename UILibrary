@@ -188,34 +188,6 @@
         return l
     end
 
-    -- ── static mountain gradient: a light-purple bloom in the top-left that
-    -- deepens across violet/indigo into near-black at the bottom-right (like
-    -- a mountain ridge). No movement — the color mix does the work. Inset a
-    -- few px and clipped INSIDE the card so it can never touch or escape the
-    -- rounded corners.
-    local function addBoxAmbient(box)
-        box.ClipsDescendants = true
-        local g = Instance.new('Frame')
-        g.Name = 'BoxAmbient'
-        g.Size = UDim2.new(1, -10, 1, -10)
-        g.Position = UDim2.fromOffset(5, 5)
-        g.BackgroundTransparency = 0.3                      -- visible wash
-        g.BorderSizePixel = 0
-        g.ZIndex = 0
-        g.Parent = box
-        local grad = Instance.new('UIGradient')
-        -- top-left → bottom-right (45°): light purple peak fading through
-        -- violet and deep indigo into near-black at the bottom-right
-        grad.Rotation = 45
-        grad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 138, 255)), -- light purple (peak)
-            ColorSequenceKeypoint.new(0.3, Color3.fromRGB(126, 92, 248)),  -- violet
-            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(66, 44, 150)),   -- deep indigo
-            ColorSequenceKeypoint.new(1, theme.dark),                      -- near-black base
-        })
-        grad.Parent = g
-    end
-
     local Options = {}
     PongiUI.Options = Options
     PongiUI.ToggleKeybind = Enum.KeyCode.RightControl
@@ -323,7 +295,6 @@
         corner(root, 10)
         stroke(root, theme.outline, 1)
         root.Parent = ScreenGui
-        addBoxAmbient(root)  -- animated purple glows clipped inside the window
         if LoadingActive then root.Visible = false end
 
         -- compact top bar: the smallest height that still fits the icon
@@ -331,7 +302,6 @@
         local top = Instance.new('Frame')
         top.Size = UDim2.new(1, 0, 0, 44)
         top.BackgroundColor3 = theme.main
-        top.BackgroundTransparency = 0.45   -- let the gradient show through the bar
         top.BorderSizePixel = 0
         corner(top, 10)
         top.Parent = root
@@ -843,7 +813,6 @@
         gb.Size = UDim2.new(1, 0, 0, 0)
         gb.AutomaticSize = Enum.AutomaticSize.Y
         gb.BackgroundColor3 = theme.bg
-        gb.BackgroundTransparency = 0.5   -- sections blend with the gradient behind
         gb.BorderSizePixel = 0
         corner(gb, 8)
         stroke(gb, theme.outline, 1)
@@ -1454,7 +1423,6 @@
         stroke(box, theme.outline, 1)
         box.ZIndex = 101
         box.Parent = overlay
-        addBoxAmbient(box)  -- animated purple glows clipped inside the loading card
 
         local logo = makeIcon(info.Icon or 'user', 46)
         logo.Position = UDim2.fromOffset(18, 18)
@@ -1583,7 +1551,6 @@
         box.BorderSizePixel = 0
         corner(box, 10)
         stroke(box, theme.outline, 1)
-        addBoxAmbient(box)  -- animated purple glows clipped inside the key card
 
         local logo = makeIcon(info.Icon or 'user', 46)
         logo.Position = UDim2.fromOffset(18, 18)
