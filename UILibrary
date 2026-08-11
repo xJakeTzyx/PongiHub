@@ -188,48 +188,32 @@
         return l
     end
 
-    -- ── animated gradient background: ONE full-card frame with a dark→purple
-    -- UIGradient (clearly visible — no blobs/circles), slowly rotating so the
-    -- UI's own background feels alive. Strictly clipped INSIDE the card: it
-    -- can never render outside the box. The loop stops when the box dies.
+    -- ── static mountain gradient: a light-purple bloom in the top-left that
+    -- deepens across violet/indigo into near-black at the bottom-right (like
+    -- a mountain ridge). No movement — the color mix does the work. Inset a
+    -- few px and clipped INSIDE the card so it can never touch or escape the
+    -- rounded corners.
     local function addBoxAmbient(box)
         box.ClipsDescendants = true
-        local layer = Instance.new('Frame')
-        layer.Name = 'BoxAmbient'
-        layer.Size = UDim2.new(1, 0, 1, 0)
-        layer.BackgroundTransparency = 1
-        layer.BorderSizePixel = 0
-        layer.ZIndex = 0
-        layer.Parent = box
-
         local g = Instance.new('Frame')
-        g.Name = 'AmbientGrad'
-        g.Size = UDim2.new(1, 0, 1, 0)
-        g.BackgroundColor3 = Color3.fromRGB(139, 92, 246)  -- bright purple
-        g.BackgroundTransparency = 0.25                     -- clearly visible wash
+        g.Name = 'BoxAmbient'
+        g.Size = UDim2.new(1, -10, 1, -10)
+        g.Position = UDim2.fromOffset(5, 5)
+        g.BackgroundTransparency = 0.3                      -- visible wash
         g.BorderSizePixel = 0
         g.ZIndex = 0
+        g.Parent = box
         local grad = Instance.new('UIGradient')
-        -- diagonal black → purple → black with a wide, bright purple band
-        grad.Rotation = 35
+        -- top-left → bottom-right (45°): light purple peak fading through
+        -- violet and deep indigo into near-black at the bottom-right
+        grad.Rotation = 45
         grad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, theme.dark),
-            ColorSequenceKeypoint.new(0.3, Color3.fromRGB(139, 92, 246)),
-            ColorSequenceKeypoint.new(0.7, Color3.fromRGB(139, 92, 246)),
-            ColorSequenceKeypoint.new(1, theme.dark),
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 138, 255)), -- light purple (peak)
+            ColorSequenceKeypoint.new(0.3, Color3.fromRGB(126, 92, 248)),  -- violet
+            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(66, 44, 150)),   -- deep indigo
+            ColorSequenceKeypoint.new(1, theme.dark),                      -- near-black base
         })
         grad.Parent = g
-        g.Parent = layer
-
-        -- rotate the gradient forever (seamless 360° loop) so the purple
-        -- shimmers slowly across the card
-        task.spawn(function()
-            while g.Parent do
-                tween(grad, { Rotation = 35 + 360 }, 16, Enum.EasingStyle.Linear)
-                task.wait(16)
-                grad.Rotation = 35
-            end
-        end)
     end
 
     local Options = {}
@@ -347,6 +331,7 @@
         local top = Instance.new('Frame')
         top.Size = UDim2.new(1, 0, 0, 44)
         top.BackgroundColor3 = theme.main
+        top.BackgroundTransparency = 0.45   -- let the gradient show through the bar
         top.BorderSizePixel = 0
         corner(top, 10)
         top.Parent = root
@@ -858,6 +843,7 @@
         gb.Size = UDim2.new(1, 0, 0, 0)
         gb.AutomaticSize = Enum.AutomaticSize.Y
         gb.BackgroundColor3 = theme.bg
+        gb.BackgroundTransparency = 0.5   -- sections blend with the gradient behind
         gb.BorderSizePixel = 0
         corner(gb, 8)
         stroke(gb, theme.outline, 1)
