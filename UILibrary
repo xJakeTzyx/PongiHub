@@ -1948,7 +1948,7 @@
         title.Position = UDim2.fromOffset(76, 14)
         title.RichText = true
         -- same [FREE]/[PREMIUM] coloring as the main window title (both grey)
-        title.Text = (info.Title or 'PongiHub Premium')
+        title.Text = (info.Title or 'PongiHub')
             :gsub('%[FREE%]', '<font color="#9d97b8">[FREE]</font>')
             :gsub('%[PREMIUM%]', '<font color="#9d97b8">[PREMIUM]</font>')
         title.TextXAlignment = Enum.TextXAlignment.Left
@@ -1991,7 +1991,7 @@
                 pcall(function()
                     if setclipboard then setclipboard(getUrl) end
                 end)
-                status.Text = 'Link copied - paste it in your browser'
+                status.Text = 'Link copied'
                 status.TextColor3 = theme.font
             end
         end
