@@ -1991,8 +1991,14 @@
                 pcall(function()
                     if setclipboard then setclipboard(getUrl) end
                 end)
-                status.Text = 'Link copied'
+                status.Text = 'Link copied!'
                 status.TextColor3 = theme.font
+                task.delay(2, function()
+                    pcall(function()
+                        status.Text = info.Status or 'Enter your license key'
+                        status.TextColor3 = theme.font
+                    end)
+                end)
             end
         end
         local btnGet = Instance.new('TextButton', box)
