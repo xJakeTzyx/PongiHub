@@ -276,6 +276,8 @@
         build = '70838785971087',
         control = '82178297158973',
         settings = '126223930195944',
+        website = '72240195918108',
+        updatelog = '111340458047618',
         ['folder-open'] = 'F',
         ['sliders-horizontal'] = '=',
         activity = '~',
@@ -328,7 +330,8 @@
         -- user can still drag it bigger/smaller with the same resize handle.
         -- Desktop keeps the full size.
         local mobile = UserInputService.TouchEnabled
-        local INIT_W, INIT_H = mobile and 465 or 620, mobile and 286 or 572
+        -- desktop height 572 -> ~515 (-10%)
+        local INIT_W, INIT_H = mobile and 465 or 620, mobile and 286 or 515
         local MIN_W, MIN_H = mobile and 330 or 440, mobile and 180 or 360
         local root = _new('Frame')
         root.Name = 'Main'
@@ -2168,12 +2171,13 @@ b.Activated:Connect(function()
     function GroupboxMeta:AddCopyRow(text, opts)
         _maybeYield()
         opts = opts or {}
-        -- 26px item (was 34): the row is snug — text and button both 26px
-        local item = baseItem(self, 26)
+        -- 22px item: the link row hugs the header above it (label and
+        -- button both vertically centered in the tighter box)
+        local item = baseItem(self, 22)
         local lbl = newFont(12)
         -- label never runs under the button zone (right 80px reserved) so
         -- long URLs truncate to '...' instead of forcing full width
-        lbl.Size = UDim2.new(1, -80, 0, 26)
+        lbl.Size = UDim2.new(1, -80, 0, 22)
         lbl.Position = UDim2.fromOffset(0, 0)
         lbl.Text = text or ''
         -- links read as links: light blue
@@ -2186,7 +2190,7 @@ b.Activated:Connect(function()
         -- collide at any window size
         local btn = _new('TextButton')
         btn.Size = UDim2.fromOffset(58, 22)
-        btn.Position = UDim2.new(1, -58, 0, 2)
+        btn.Position = UDim2.new(1, -58, 0, 0)
         btn.BackgroundColor3 = theme.main2
         btn.BorderSizePixel = 0
         btn.Text = opts.ButtonText or 'Copy'
