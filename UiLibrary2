@@ -2157,14 +2157,12 @@ b.Activated:Connect(function()
         local h = minHeight or 20
         local f = _new('Frame')
         f.Size = UDim2.new(1, 0, 0, h)
-        f.AutomaticSize = Enum.AutomaticSize.Y
         f.BackgroundTransparency = 1
         f.Parent = self._container
         local item = { _h = h, _frame = f, _parent = self }
         table.insert(self._items, item)
         local lbl = newFont(13)
         lbl.Size = UDim2.new(1, 0, 0, h)
-        lbl.AutomaticSize = Enum.AutomaticSize.Y
         lbl.Position = UDim2.fromOffset(0, 0)
         lbl.Text = text or ''
         lbl.TextWrapped = true
@@ -2172,9 +2170,25 @@ b.Activated:Connect(function()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.TextYAlignment = Enum.TextYAlignment.Top
         lbl.Parent = f
+        -- OVERLAP FIX: RichText + TextWrapped + AutomaticSize mis-sizes on
+        -- the first pass (long wrapped lines draw over the next row). NO
+        -- AutomaticSize — the height is owned by a TextBounds sync: explicit
+        -- size re-asserted whenever the rendered bounds change (text set,
+        -- window resized, font loaded).
+        local function syncHeight()
+            local real = math.ceil(lbl.TextBounds.Y)
+            if real > 0 and math.abs(lbl.AbsoluteSize.Y - real) > 0.5 then
+                lbl.Size = UDim2.new(1, 0, 0, real)
+                f.Size = UDim2.new(1, 0, 0, real)
+            end
+        end
+        lbl:GetPropertyChangedSignal('TextBounds'):Connect(syncHeight)
+        lbl:GetPropertyChangedSignal('AbsoluteSize'):Connect(syncHeight)
+        task.defer(syncHeight)
         item._lbl = lbl
         item.SetText = function(_, t)
             lbl.Text = tostring(t)
+            task.defer(syncHeight)
         end
         return item
     end
