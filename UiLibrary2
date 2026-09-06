@@ -853,8 +853,10 @@
                 row.AutomaticSize = Enum.AutomaticSize.Y
                 row.BackgroundTransparency = 1
                 row.Parent = f
+                -- title auto-sizes tightly to its glyphs (no fixed 30px box —
+                -- the box's dead space was what made the sub look far away)
                 local title = newFont(21, true)
-                title.Size = UDim2.new(1, 0, 0, 30)
+                title.Size = UDim2.new(1, 0, 0, 0)
                 title.AutomaticSize = Enum.AutomaticSize.Y
                 title.AnchorPoint = Vector2.new(0.5, 0)
                 title.Position = UDim2.fromScale(0.5, 0)
@@ -887,15 +889,19 @@
                     end
                 end
                 if sub then
-                    -- hug the title: only a 2px gap under it
+                    -- glued to the title: tracks the title's REAL rendered
+                    -- height and sits 2px under it
                     local subL = newFont(14)
                     subL.Size = UDim2.new(1, 0, 0, 18)
                     subL.AnchorPoint = Vector2.new(0.5, 0)
-                    subL.Position = UDim2.new(0.5, 0, 0, 30)
+                    subL.Position = UDim2.new(0.5, 0, 0, math.max(1, title.TextBounds.Y) + 2)
                     subL.Text = sub
                     subL.TextColor3 = theme.dim
                     subL.TextXAlignment = Enum.TextXAlignment.Center
                     subL.Parent = row
+                    title:GetPropertyChangedSignal('TextBounds'):Connect(function()
+                        subL.Position = UDim2.new(0.5, 0, 0, math.max(1, title.TextBounds.Y) + 2)
+                    end)
                 end
                 local bottomPad = _new('Frame')
                 bottomPad.Size = UDim2.new(1, 0, 0, 8)
@@ -2099,10 +2105,12 @@ b.Activated:Connect(function()
     -- bold section header (e.g. 'Bloxburg - 09/29/2026' inside an update log)
     function GroupboxMeta:AddHeader(text)
         _maybeYield()
-        local item = baseItem(self, 26)
+        -- tight: 18px item, label at y0 — the header sits right on top of
+        -- whatever follows it instead of floating in dead space
+        local item = baseItem(self, 18)
         local lbl = newFont(14, true)
-        lbl.Size = UDim2.new(1, 0, 0, 22)
-        lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.Size = UDim2.new(1, 0, 0, 16)
+        lbl.Position = UDim2.fromOffset(0, 0)
         lbl.Text = text or ''
         lbl.TextColor3 = theme.font
         lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -2163,12 +2171,12 @@ b.Activated:Connect(function()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.Parent = item._frame
-        -- Copy button hugs the text (sits right after the text's real
-        -- width) and FOLLOWS the label on every window resize — the
-        -- AbsoluteSize signal fires both when shrinking AND growing
+        -- Copy button pinned to the very right side of the section; the
+        -- label reserves the last 80px and truncates its URL, so they never
+        -- collide at any window size
         local btn = _new('TextButton')
         btn.Size = UDim2.fromOffset(58, 26)
-        btn.Position = UDim2.fromOffset(8, 2)
+        btn.Position = UDim2.new(1, -58, 0, 2)
         btn.BackgroundColor3 = theme.main2
         btn.BorderSizePixel = 0
         btn.Text = opts.ButtonText or 'Copy'
@@ -2179,13 +2187,6 @@ b.Activated:Connect(function()
         corner(btn, 6)
         stroke(btn, theme.outline, 1)
         btn.Parent = item._frame
-        local function repositionBtn()
-            local w = math.min(lbl.TextBounds.X, lbl.AbsoluteSize.X)
-            btn.Position = UDim2.fromOffset(math.max(0, w) + 8, 2)
-        end
-        lbl:GetPropertyChangedSignal('TextBounds'):Connect(repositionBtn)
-        lbl:GetPropertyChangedSignal('AbsoluteSize'):Connect(repositionBtn)
-        task.defer(repositionBtn)
         btn.MouseEnter:Connect(function()
             tween(btn, { BackgroundColor3 = theme.accent }, 0.15)
             btn.TextColor3 = Color3.new(1, 1, 1)
