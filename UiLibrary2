@@ -1,1 +1,3029 @@
-s
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- PongiUI â€” custom UI library (Obsidian-inspired sections)
+    -- API surface (used by PongiHub scripts â€” do not rename):
+    --   PongiUI:CreateWindow({Title,Icon,Footer,NotifySide,ShowCustomCursor})
+    --   Window:AddTab(name, icon)          -> tab
+    --   Window:AddDialog(idx, {Title,Description})
+    --   Window:Toggle(value) / PongiUI.Toggle(value)
+    --   Tab:AddLeftGroupbox(name, icon) / Tab:AddRightGroupbox(name, icon)
+    --   Groupbox:Resize()                  (safe no-op â€” auto-sizing)
+    --   Groupbox:AddButton({Text,Func})
+    --   Groupbox:AddToggle(id, {Text,Default,Callback}) -> item.SetValue
+    --   Groupbox:AddInput(id, {Text,Placeholder,Callback})
+    --   Groupbox:AddDropdown(id, {Text,Values,Default,Callback}) -> item.SetValue/SetValues
+    --   Groupbox:AddLabel(text) -> item.SetText / item.AddKeyPicker
+    --   PongiUI:CreateLoading({Title,Icon}) / PongiUI:Notify({Title,Description,Time})
+    --   PongiUI.Options[id], PongiUI.ToggleKeybind, PongiUI.Toggled
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- HOW TO USE â€” the exact flow v21-secure uses (copy-paste friendly)
+    --
+    --   local PongiUI = loadstring(readfile('pongiu.luau'))()
+    --
+    --   -- loading screen: the window stays HIDDEN until Loading:Destroy()
+    --   -- runs, then it pops in (loading is fully gone first)
+    --   local Loading = PongiUI:CreateLoading({ Title = 'MyHub', Icon = 102529354665225 })
+    --   task.spawn(function()
+    --       for i, msg in ipairs({ 'Loading UI', 'Preparing tools' }) do
+    --           Loading:SetCurrentStep(i)
+    --           Loading:SetMessage(msg)
+    --           task.wait(0.3)
+    --       end
+    --       Loading:SetCurrentStep(10)
+    --       Loading:SetMessage('Ready')
+    --       task.wait(0.5)
+    --       Loading:Destroy()
+    --   end)
+    --
+    --   local Window = PongiUI:CreateWindow({ Title = 'MyHub', Icon = 102529354665225,
+    --       Footer = 'discord.gg/...', NotifySide = 'Right', ShowCustomCursor = false })
+    --   local Tab  = Window:AddTab('Main', 'user')
+    --   local Tab2 = Window:AddTab('Settings', 'settings')
+    --
+    --   local gb = Tab:AddLeftGroupbox('Player', 'user')
+    --   local dd = gb:AddDropdown('ABPlayer', { Text = 'Select Player', Values = playerList,
+    --       Default = playerList[1] or '', Callback = function(v) selected = v end })
+    --   gb:AddButton({ Text = 'Refresh', Func = function()
+    --       dd:SetValues(newList); dd:SetValue(newList[1]) end })
+    --   gb:AddToggle('ABT', { Text = 'Toggle', Default = false,
+    --       Callback = function(v) enabled = v end })
+    --   gb:AddInput('ABName', { Text = 'Save Name', Placeholder = 'e.g. MyHouse',
+    --       Callback = function(v) saveName = v end })  -- gray hint always visible
+    --
+    --   -- Toggle UI key: create a keypicker, then wire it as the window toggle
+    --   local lbl = gb:AddLabel('Toggle UI')
+    --   lbl:AddKeyPicker('ABToggleKey', { Text = 'Toggle UI', Default = 'RightControl',
+    --       Changed = function(key) PongiUI.ToggleKeybind = PongiUI.Options['ABToggleKey'] end })
+    --   PongiUI.ToggleKeybind = PongiUI.Options['ABToggleKey']  -- wire it right away
+    --   -- (the library falls back to RightControl when nothing is wired)
+    --
+    --   -- custom status panel: parent your own frames to .Container â€” the
+    --   -- groupbox auto-sizes to include them (see Build Status in v21-secure)
+    --   local gbStatus = Tab:AddRightGroupbox('Status', 'activity')
+    --   local barRow = _new('Frame')
+    --   barRow.Size = UDim2.new(1, 0, 0, 20)
+    --   barRow.Parent = gbStatus.Container
+    --
+    --   -- notifications: top-right of the screen, slides in from off-screen,
+    --   -- the purple bar drains left->right as a countdown timer
+    --   PongiUI:Notify({ Title = 'Done', Description = 'Message', Time = 4 })
+    --
+    --   -- confirm dialog (Yes/No)
+    --   local dlg = Window:AddDialog('Confirm', { Title = 'Are you sure?', Description = '...' })
+    --   dlg:AddFooterButton('Yes', { Title = 'Yes', Variant = 'Primary',
+    --       Callback = function() doIt() end })
+    --   dlg:AddFooterButton('No',  { Title = 'No',  Variant = 'Secondary' })
+    --   dlg:Resize()
+    --
+    --   -- mobile: when TouchEnabled, a floating logo button (top-left edge)
+    --   -- appears automatically to open/close the UI; the bottom-right grip
+    --   -- resizes the window with mouse or touch on any device
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    local PongiUI = {}
+    -- every spinner created by this library, so the status driver can find
+    -- the Auto Farm status spinner object by its Frame and drive it via SetBusy
+    PongiUI._spinners = {}
+    local TweenService = game:GetService('TweenService')
+    local UserInputService = game:GetService('UserInputService')
+    local RunService = game:GetService('RunService')
+    local CoreGui = game:GetService('CoreGui')
+    local Players = game:GetService('Players')
+    local TPS = game:GetService('TextService')
+
+    -- Create UI instances at the GAME's identity (2) instead of the executor's
+    -- plugin identity (8). Instances created at identity 8 are plugin-owned, and
+    -- when the game's own identity-2 code walks CoreGui/RobloxGui (which it does
+    -- during build-mode / plot streaming) it throws a flood of
+    -- "cannot access 'Instance' (lacking capability Plugin)" errors. Running the
+    -- Instance.new here at identity 2 makes every UI element game-owned so the
+    -- game can read/walk it freely. (Identity is restored on return.)
+    local function _new(cls, parent)
+        local old = getthreadidentity and getthreadidentity() or 8
+        if setthreadidentity then setthreadidentity(2) end
+        local ok, inst
+        if parent then
+            ok, inst = pcall(function() return Instance.new(cls, parent) end)
+        else
+            ok, inst = pcall(function() return Instance.new(cls) end)
+        end
+        if setthreadidentity then setthreadidentity(old) end
+        if not ok then
+            warn('[PongiUI] Instance.new failed for ' .. tostring(cls))
+            return nil
+        end
+        return inst
+    end
+
+    -- random ScreenGui name so it does not stand out in the executor explorer
+    local function randName(len)
+        local chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'
+        local out = {}
+        for _ = 1, (len or 12) do
+            local i = math.random(1, #chars)
+            out[#out + 1] = chars:sub(i, i)
+        end
+        return table.concat(out)
+    end
+
+    -- yield budget: the menu build creates hundreds of instances in one
+    -- synchronous block, which freezes the whole client for seconds (the
+    -- loading screen cannot animate). Yielding every N creations lets the
+    -- renderer breathe â€” the build is a bit slower but the loading UI stays
+    -- alive the whole time.
+    local _yieldBudget = 0
+    local function _maybeYield()
+        _yieldBudget = _yieldBudget + 1
+        if _yieldBudget % 20 == 0 then task.wait() end
+    end
+
+    -- hidden UI container (gethui & friends) â€” renders on screen but stays
+    -- invisible in the executor explorer; falls back to CoreGui elsewhere
+    local function hiddenUI()
+        for _, fnName in ipairs({ 'gethui', 'get_hidden_gui', 'get_hidden_ui', 'gethiddengui', 'gethiddenui' }) do
+            local fn = (getgenv and getgenv()[fnName]) or _G[fnName]
+            if type(fn) == 'function' then
+                local ok, h = pcall(fn)
+                if ok and h then return h end
+            end
+        end
+        return nil
+    end
+
+    -- remove leftover PongiUI windows from previous runs
+    local function cleanStale()
+        local roots = { CoreGui:FindFirstChild('RobloxGui'), hiddenUI() }
+        for _, root in ipairs(roots) do
+            if root then
+                for _, sg in ipairs(root:GetChildren()) do
+                    if sg:IsA('ScreenGui') and sg:GetAttribute('PongihubUI') then
+                        pcall(function() sg:Destroy() end)
+                    end
+                end
+            end
+        end
+    end
+
+    local theme = {
+        bg = Color3.fromRGB(12, 12, 15),
+        main = Color3.fromRGB(19, 19, 24),
+        main2 = Color3.fromRGB(24, 24, 30),
+        accent = Color3.fromRGB(124, 88, 255),
+        accent2 = Color3.fromRGB(100, 66, 220),
+        outline = Color3.fromRGB(72, 72, 90),
+        font = Color3.fromRGB(232, 232, 240),
+        dim = Color3.fromRGB(172, 172, 188),
+        dark = Color3.fromRGB(6, 6, 8),
+        red = Color3.fromRGB(232, 66, 66),
+        white = Color3.fromRGB(255, 255, 255),
+        radius = 6,
+    }
+
+    -- TweenService:Create needs Plugin capability â€” elevate like the
+    -- rest of the script does for its own UI work
+    local function tween(inst, props, dur, style)
+        local old = setthreadidentity and getthreadidentity() or 8
+        if setthreadidentity then setthreadidentity(8) end
+        pcall(function()
+            TweenService:Create(inst, TweenInfo.new(dur or 0.2,
+                style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+        end)
+        if setthreadidentity then setthreadidentity(old) end
+    end
+
+    local function corner(inst, r)
+        local c = _new('UICorner')
+        c.CornerRadius = UDim.new(0, r or theme.radius)
+        c.Parent = inst
+        return c
+    end
+
+    local function stroke(inst, color, thick)
+        local s = _new('UIStroke')
+        s.Color = color or theme.outline
+        s.Thickness = thick or 1
+        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        s.Parent = inst
+        return s
+    end
+
+    local function newFont(size, bold)
+        local l = _new('TextLabel')
+        l.Font = Enum.Font.Gotham
+        l.TextSize = size or 14
+        l.TextColor3 = theme.font
+        l.BackgroundTransparency = 1
+        l.BorderSizePixel = 0
+        if bold then l.Font = Enum.Font.GothamBold end
+        return l
+    end
+
+    local Options = {}
+    PongiUI.Options = Options
+    PongiUI.ToggleKeybind = Enum.KeyCode.RightControl
+    PongiUI.Toggled = false
+
+    cleanStale()
+    local ScreenGui = _new('ScreenGui')
+    ScreenGui.Name = randName()
+    ScreenGui:SetAttribute('PongihubUI', true)
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    -- explorer hiding, best-effort per executor (never breaks rendering):
+    --   protectgui()  â€” Synapse-family; makes the instance invisible to the
+    --                   explorer outright (guarded: absent on Delta etc.)
+    --   gethui()      â€” parents into the executor's hidden container (Delta
+    --                   renders it full-screen and the explorer never shows
+    --                   it). NOT used on Real: there gethui() resolves to
+    --                   CoreGui.RobloxGui, which renders off-center in an
+    --                   828x942 space â€” so skip any container that IS that.
+    --   fallback      â€” plain CoreGui + random name (Real, unknown executors)
+    local hidden = hiddenUI()
+    if hidden and hidden ~= CoreGui:FindFirstChild('RobloxGui') and hidden ~= CoreGui then
+        ScreenGui.Parent = hidden
+    else
+        ScreenGui.Parent = CoreGui:FindFirstChild('RobloxGui') or CoreGui
+    end
+    for _, fnName in ipairs({ 'protectgui', 'protect_gui' }) do
+        local fn = (getgenv and getgenv()[fnName]) or _G[fnName]
+        if type(fn) == 'function' then
+            local ok = pcall(fn, ScreenGui)
+            if ok then break end
+        end
+    end
+
+    -- notification stack: top-right corner of the CLIENT (never the window)
+    local NotifyArea = _new('Frame')
+    NotifyArea.Name = 'NotifyArea'
+    NotifyArea.Size = UDim2.fromOffset(320, 400)
+    NotifyArea.Position = UDim2.new(1, -20, 0, 16)  -- right edge of the screen, 20px in
+    NotifyArea.AnchorPoint = Vector2.new(1, 0)
+    NotifyArea.BackgroundTransparency = 1
+    NotifyArea.ZIndex = 200
+    NotifyArea.Parent = ScreenGui
+    local NotifyList = _new('UIListLayout')
+    NotifyList.Padding = UDim.new(0, 8)
+    NotifyList.SortOrder = Enum.SortOrder.LayoutOrder
+    NotifyList.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    NotifyList.Parent = NotifyArea
+
+    local Window = nil
+    local captureCount = 0  -- >0 while any keypicker is listening
+    local LoadingActive = false  -- window stays hidden while the loading screen is up
+    local MobileToggleBtn = nil  -- mobile toggle button (revealed when loading ends)
+
+    local ICONS = {
+        home = '133015468913174',
+        user = '71517355278733',
+        build = '70838785971087',
+        control = '82178297158973',
+        settings = '126223930195944',
+        ['folder-open'] = 'F',
+        ['sliders-horizontal'] = '=',
+        activity = '~',
+    }
+    local function makeIcon(icon, size)
+        local holder = _new('Frame')
+        holder.Size = UDim2.fromOffset(size or 22, size or 22)
+        holder.BackgroundColor3 = theme.main2
+        holder.BorderSizePixel = 0
+        corner(holder, 6)
+        stroke(holder, theme.outline, 1)
+        local name = tostring(icon)
+        local assetId = nil
+        if tonumber(name) then
+            assetId = name
+        else
+            local mapped = ICONS[name]
+            if mapped and tonumber(mapped) then assetId = mapped end
+        end
+        if assetId then
+            local img = _new('ImageLabel')
+            img.Size = UDim2.new(1, -6, 1, -6)
+            img.Position = UDim2.fromOffset(3, 3)
+            img.BackgroundTransparency = 1
+            img.BorderSizePixel = 0
+            img.Image = 'rbxassetid://' .. assetId
+            img.Parent = holder
+            return holder
+        end
+        local lbl = newFont(12)
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.TextColor3 = theme.accent
+        lbl.Text = ICONS[name] or string.sub(name, 1, 1):upper()
+        lbl.Parent = holder
+        return holder
+    end
+
+    local function measure(text, size)
+        local w = TPS:GetTextSize(text, size or 14, Enum.Font.Gotham, Vector2.new(2000, 50))
+        return w.X
+    end
+
+    local WindowMeta = {}
+    WindowMeta.__index = WindowMeta
+    local GroupboxFactory = nil
+
+    function PongiUI:CreateWindow(info)
+        info = info or {}
+        -- mobile: start at ~3/4 width (1.5x wider than the half-size) â€” the
+        -- user can still drag it bigger/smaller with the same resize handle.
+        -- Desktop keeps the full size.
+        local mobile = UserInputService.TouchEnabled
+        local INIT_W, INIT_H = mobile and 465 or 620, mobile and 286 or 572
+        local MIN_W, MIN_H = mobile and 330 or 440, mobile and 180 or 360
+        local root = _new('Frame')
+        root.Name = 'Main'
+        root.Size = UDim2.fromOffset(INIT_W, INIT_H)
+        root.AnchorPoint = Vector2.new(0.5, 0.5)
+        root.Position = UDim2.fromScale(0.5, 0.42)
+        root.BackgroundColor3 = theme.bg
+        root.BorderSizePixel = 0
+        corner(root, 10)
+        stroke(root, theme.outline, 1)
+        root.Parent = ScreenGui
+        if LoadingActive then root.Visible = false end
+
+        -- compact top bar: the smallest height that still fits the icon
+        -- (36px icon + 4px margins), title centered, no footer
+        local top = _new('Frame')
+        top.Size = UDim2.new(1, 0, 0, 44)
+        top.BackgroundColor3 = theme.main
+        top.BorderSizePixel = 0
+        corner(top, 10)
+        top.ZIndex = 60
+        top.Parent = root
+
+        local logo = makeIcon(info.Icon or 'user', 36)
+        logo.Position = UDim2.fromOffset(14, 4)
+        logo.Parent = top
+        -- title bar: main name centered, tier badge right after it — the
+        -- badge is SMALLER and the same grey for BOTH tiers (uniform; the
+        -- text itself tells the tier), and the pair stays centered together
+        local rawTitle = info.Title or 'PongiUI'
+        local mainPart = rawTitle:gsub('%s*%[%w+%]%s*$', '')
+        local badgePart = rawTitle:match('%[%w+%]$') or ''
+        local titleBar = _new('Frame')
+        titleBar.Size = UDim2.new(0, 0, 0, 44)
+        titleBar.AnchorPoint = Vector2.new(0.5, 0)
+        titleBar.Position = UDim2.fromScale(0.5, 0)
+        titleBar.AutomaticSize = Enum.AutomaticSize.X
+        titleBar.BackgroundTransparency = 1
+        titleBar.Parent = top
+        local titleList = _new('UIListLayout')
+        titleList.FillDirection = Enum.FillDirection.Horizontal
+        titleList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        titleList.VerticalAlignment = Enum.VerticalAlignment.Center
+        titleList.Padding = UDim.new(0, 6)
+        titleList.SortOrder = Enum.SortOrder.LayoutOrder
+        titleList.Parent = titleBar
+        local title = newFont(20)
+        title.Size = UDim2.fromOffset(measure(mainPart, 20), 44)
+        title.Text = mainPart
+        title.TextYAlignment = Enum.TextYAlignment.Center
+        title.Parent = titleBar
+        if badgePart ~= '' then
+            local badge = newFont(13)
+            badge.Size = UDim2.fromOffset(measure(badgePart, 13), 44)
+            badge.Text = badgePart
+            badge.TextYAlignment = Enum.TextYAlignment.Center
+            badge.TextColor3 = Color3.fromRGB(157, 151, 184)
+            badge.Parent = titleBar
+        end
+
+        local tabRow = _new('Frame')
+        tabRow.Size = UDim2.new(1, -20, 0, 36)
+        tabRow.Position = UDim2.fromOffset(10, 52)
+        tabRow.BackgroundTransparency = 1
+        tabRow.Parent = root
+        local tabList = _new('UIListLayout')
+        tabList.FillDirection = Enum.FillDirection.Horizontal
+        tabList.Padding = UDim.new(0, 6)
+        tabList.SortOrder = Enum.SortOrder.LayoutOrder
+        tabList.Parent = tabRow
+
+        -- divider between the tabs and the sections, aligned with both
+        local tabLine = _new('Frame')
+        tabLine.Size = UDim2.new(1, -20, 0, 1)
+        tabLine.Position = UDim2.fromOffset(10, 92)
+        tabLine.BackgroundColor3 = theme.outline
+        tabLine.BorderSizePixel = 0
+        tabLine.Parent = root
+
+        -- body shares the tab row's margins so the sections align with the
+        -- tabs (the scroll frames add only a thin padding for the outlines)
+        local body = _new('Frame')
+        body.Size = UDim2.new(1, -20, 1, -108)
+        body.Position = UDim2.fromOffset(10, 96)
+        body.BackgroundTransparency = 1
+        body.Parent = root
+
+        -- banner host: full-width strip ABOVE the left/right columns. Tabs
+        -- with a banner push the columns down while they are active.
+        local bannerHost = _new('Frame')
+        bannerHost.Size = UDim2.new(1, 0, 0, 0)
+        bannerHost.BackgroundTransparency = 1
+        bannerHost.Parent = body
+
+        local left = _new('Frame')
+        left.Size = UDim2.new(0.5, -7, 1, 0)
+        left.BackgroundTransparency = 1
+        left.Parent = body
+        local right = _new('Frame')
+        right.Size = UDim2.new(0.5, -7, 1, 0)
+        right.Position = UDim2.new(0.5, 7, 0, 0)
+        right.BackgroundTransparency = 1
+        right.Parent = body
+
+        -- drag (input.Position is a Vector3 â€” never subtract it from a Vector2)
+        local dragging = false
+        local dragOffset = Vector2.new(0, 0)
+        top.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                local p = input.Position
+                -- the window is anchored at its center â€” track the anchor so
+                -- the click point stays under the cursor while dragging
+                local anchor = root.AbsolutePosition + root.AbsoluteSize * root.AnchorPoint
+                dragOffset = Vector2.new(p.X, p.Y) - anchor
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            -- on mobile Roblox fires BOTH MouseMovement AND Touch for one
+            -- finger move â€” handling both makes the window jitter. Use
+            -- Touch only when TouchEnabled, MouseMovement only on desktop.
+            if dragging and (
+                (UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.Touch)
+                or (not UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.MouseMovement)
+            ) then
+                local p = input.Position
+                root.Position = UDim2.fromOffset(p.X - dragOffset.X, p.Y - dragOffset.Y)
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+
+        -- resize grip: hold the bottom-right corner dots and drag to resize
+        -- (mouse AND touch â€” this is the mobile resize handle)
+        local grip = _new('Frame')
+        grip.Size = UDim2.fromOffset(18, 18)
+        grip.Position = UDim2.new(1, -24, 1, -24)
+        grip.BackgroundTransparency = 1
+        grip.ZIndex = 5
+        grip.Parent = root
+        for i = 0, 2 do
+            local d = _new('Frame')
+            d.Size = UDim2.fromOffset(4, 4)
+            d.Position = UDim2.fromOffset(14 - i * 6, 14 - i * 6)
+            d.BackgroundColor3 = theme.dim
+            d.BorderSizePixel = 0
+            d.Parent = grip
+        end
+        local resizing = false
+        grip.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                resizing = true
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            -- same as drag: one input type per device, never both
+            if resizing and (
+                (UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.Touch)
+                or (not UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.MouseMovement)
+            ) then
+                local p = input.Position
+                local newW = math.max(MIN_W, p.X - root.AbsolutePosition.X)
+                local newH = math.max(MIN_H, p.Y - root.AbsolutePosition.Y)
+                root.Size = UDim2.fromOffset(newW, newH)
+                -- keep the pop animation's base size in sync with the resize
+                Window._size = root.Size
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                resizing = false
+            end
+        end)
+
+        -- mobile-only floating toggle button: sits at the top-left edge of
+        -- the screen (off the window) so the UI opens/closes without a
+        -- keyboard. Desktop never sees it (TouchEnabled is false there).
+        if UserInputService.TouchEnabled then
+            local toggleBtn = _new('TextButton')
+            toggleBtn.Size = UDim2.fromOffset(44, 44)
+            toggleBtn.Position = UDim2.fromOffset(10, 14)
+            toggleBtn.BackgroundColor3 = theme.main
+            toggleBtn.BorderSizePixel = 0
+            corner(toggleBtn, 12)
+            stroke(toggleBtn, theme.outline, 1)
+            toggleBtn.ZIndex = 300
+            toggleBtn.Parent = ScreenGui
+            -- stay hidden while the loading screen is up: the button must appear
+            -- TOGETHER with the window, not before it
+            toggleBtn.Visible = not LoadingActive
+            MobileToggleBtn = toggleBtn
+            local tIcon = makeIcon(info.Icon or 'user', 26)
+            tIcon.Position = UDim2.fromOffset(9, 9)
+            tIcon.Parent = toggleBtn
+            toggleBtn.Activated:Connect(function()
+                if Window then Window:Toggle() end
+            end)
+        end
+
+        Window = setmetatable({
+            _root = root,
+            _size = UDim2.fromOffset(INIT_W, INIT_H),
+            _tabs = {},
+            _tabRow = tabRow,
+            _bannerHost = bannerHost,
+            _left = left,
+            _right = right,
+            Title = info.Title or 'PongiUI',
+            Icon = info.Icon,
+            Footer = info.Footer,
+        }, WindowMeta)
+
+        return Window
+    end
+
+    -- fade the whole window (every descendant) together so closing/open
+    -- looks synced; each element's original transparency is remembered the
+    -- first time it is faded and restored when the window reopens
+    local baseTransp = {}
+    local activeFade = nil     -- the heartbeat connection of the running fade
+    local fadeGen = 0          -- bumped on every toggle; stale fades/hides bail
+    local function fadeWindow(root, opening, dur)
+        -- one shared fade driver: every element is moved from the same
+        -- progress value so backgrounds, text and images can never drift
+        -- apart (many separate tweens stagger text behind the box on some
+        -- executors). Base values are remembered on first use so reopens
+        -- restore the original look exactly. If a fade is already running
+        -- (closeâ†’open quickly), it is cancelled first so two drivers never
+        -- fight over the same properties.
+        if activeFade then activeFade:Disconnect(); activeFade = nil end
+        local bgs, texts, imgs, strokes, scrolls = {}, {}, {}, {}, {}
+        local function collect(g)
+            if g:IsA('Frame') or g:IsA('TextButton') or g:IsA('TextBox') or g:IsA('ImageLabel') then
+                bgs[#bgs+1] = g
+            end
+            if g:IsA('TextLabel') or g:IsA('TextButton') or g:IsA('TextBox') then
+                texts[#texts+1] = g
+            end
+            if g:IsA('ImageLabel') then
+                imgs[#imgs+1] = g
+            end
+            if g:IsA('UIStroke') then
+                strokes[#strokes+1] = g
+            elseif g:IsA('ScrollingFrame') then
+                scrolls[#scrolls+1] = g
+            end
+            for _, c in ipairs(g:GetChildren()) do collect(c) end
+        end
+        collect(root)
+        -- snapshot where elements are RIGHT NOW (opening after a close starts
+        -- fully faded; a fresh open starts at originals) and remember the true
+        -- originals on first use
+        local curB, curT, curI, curS, curSc = {}, {}, {}, {}, {}
+        for i, g in ipairs(bgs) do curB[i] = g.BackgroundTransparency end
+        for i, g in ipairs(texts) do curT[i] = g.TextTransparency end
+        for i, g in ipairs(imgs) do curI[i] = g.ImageTransparency end
+        for i, g in ipairs(strokes) do curS[i] = g.Transparency end
+        for i, g in ipairs(scrolls) do curSc[i] = g.ScrollBarImageTransparency end
+        local function propOf(g, prop)
+            if prop == 'bg' then return g.BackgroundTransparency
+            elseif prop == 'text' then return g.TextTransparency
+            elseif prop == 'img' then return g.ImageTransparency
+            elseif prop == 'stroke' then return g.Transparency
+            else return g.ScrollBarImageTransparency end
+        end
+        local function baseOf(g, prop)
+            local b = baseTransp[g]
+            if not b then b = {}; baseTransp[g] = b end
+            if b[prop] == nil then b[prop] = propOf(g, prop) end
+            return b[prop]
+        end
+        -- record true originals BEFORE the fade moves anything (close INCLUDED).
+        -- baseOf caches the first value it sees, so if the first sighting is an
+        -- OPEN (elements already faded to 1), the cache records 1 as the
+        -- "original" and the reopen goes 1->1 â€” every section on the active tab
+        -- stays invisible forever. Recording on close captures the natural value.
+        for _, g in ipairs(bgs) do baseOf(g, 'bg') end
+        for _, g in ipairs(texts) do baseOf(g, 'text') end
+        for _, g in ipairs(imgs) do baseOf(g, 'img') end
+        for _, g in ipairs(strokes) do baseOf(g, 'stroke') end
+        for _, g in ipairs(scrolls) do baseOf(g, 'scroll') end
+        local rootB = baseOf(root, 'bg') or 0
+        local rootCur = root.BackgroundTransparency
+        local t0 = tick()
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if activeFade ~= conn then
+                conn:Disconnect()  -- superseded by a newer fade; stop for good
+                return
+            end
+            local p = math.min(1, (tick() - t0) / dur)
+            p = 1 - (1 - p) * (1 - p)  -- quad out
+            root.BackgroundTransparency = rootCur + (opening and (rootB - rootCur) or (1 - rootCur)) * p
+            for i, g in ipairs(bgs) do
+                g.BackgroundTransparency = curB[i] + (opening and (baseOf(g, 'bg') - curB[i]) or (1 - curB[i])) * p
+            end
+            for i, g in ipairs(texts) do
+                g.TextTransparency = curT[i] + (opening and (baseOf(g, 'text') - curT[i]) or (1 - curT[i])) * p
+            end
+            for i, g in ipairs(imgs) do
+                g.ImageTransparency = curI[i] + (opening and (baseOf(g, 'img') - curI[i]) or (1 - curI[i])) * p
+            end
+            for i, g in ipairs(strokes) do
+                g.Transparency = curS[i] + (opening and (baseOf(g, 'stroke') - curS[i]) or (1 - curS[i])) * p
+            end
+            for i, g in ipairs(scrolls) do
+                g.ScrollBarImageTransparency = curSc[i] + (opening and ((baseOf(g, 'scroll') or 0.35) - curSc[i]) or (1 - curSc[i])) * p
+            end
+            if p >= 1 then
+                conn:Disconnect()
+                if activeFade == conn then activeFade = nil end
+                if opening then
+                    -- restore exact originals so nothing stays dimmed
+                    for _, g in ipairs(bgs) do g.BackgroundTransparency = baseOf(g, 'bg') end
+                    for _, g in ipairs(texts) do g.TextTransparency = baseOf(g, 'text') end
+                    for _, g in ipairs(imgs) do g.ImageTransparency = baseOf(g, 'img') end
+                    for _, g in ipairs(strokes) do g.Transparency = baseOf(g, 'stroke') end
+                    for _, g in ipairs(scrolls) do g.ScrollBarImageTransparency = baseOf(g, 'scroll') or 0.35 end
+                    root.BackgroundTransparency = rootB
+                end
+            end
+        end)
+        -- register THIS connection as the running fade BEFORE the first
+        -- heartbeat fires â€” without this, activeFade stays nil, the guard
+        -- above always matches, and the fade kills itself on frame one
+        -- (the close/open animation never plays, the window just snaps).
+        activeFade = conn
+    end
+
+    function WindowMeta:Toggle(value)
+        -- never use `and/or` here: an explicit Toggle(false) while Toggled is
+        -- already false would compute `false or (not false)` == true and OPEN
+        -- the window instead of closing it (fresh windows start Toggled=false)
+        local target
+        if value ~= nil then
+            target = value
+        else
+            target = not PongiUI.Toggled
+        end
+        PongiUI.Toggled = target
+        local root = self._root
+        fadeGen = fadeGen + 1
+        if target then
+            root.Visible = true
+            -- pop-in: start slightly smaller, overshoot to full size with
+            -- Back easing (the window "pops" open instead of just fading)
+            local bs = self._size or UDim2.fromOffset(620, 572)
+            -- UDim2 * number is not supported on this client â€” scale the
+            -- offsets manually (a raw multiply here breaks the reopen: the
+            -- pop errors, the fade never runs and the window comes back as
+            -- an empty black box)
+            root.Size = UDim2.fromOffset(bs.X.Offset * 0.92, bs.Y.Offset * 0.92)
+            tween(root, { Size = bs }, 0.3)  -- no Back easing: the pop shouldn't bounce
+            fadeWindow(root, true, 0.25)
+        else
+            fadeWindow(root, false, 0.125)  -- close is 2x faster than open
+            local gen = fadeGen
+            task.delay(0.125, function()
+                -- if the window was toggled again before the hide fired, skip
+                -- (otherwise the delayed hide kills the freshly reopened UI)
+                if gen ~= fadeGen or PongiUI.Toggled then return end
+                root.Visible = false
+                root.BackgroundTransparency = 0
+            end)
+        end
+        return target
+    end
+    PongiUI.Toggle = function(self, value)
+        if Window then Window:Toggle(value) end
+    end
+
+    -- the toggle keybind: accepts a KeyCode OR the picker table the script
+    -- stores in PongiUI.Options (pressing the bound key toggles the window)
+    UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.Unknown then return end
+        if captureCount > 0 then return end
+        if LoadingActive then return end  -- no toggling while the loading screen is up
+        local kb = PongiUI.ToggleKeybind
+        local key = nil
+        if typeof(kb) == 'EnumItem' then
+            key = kb
+        elseif type(kb) == 'table' and kb._key then
+            key = kb._key
+        end
+        if key and input.KeyCode == key and input.UserInputState == Enum.UserInputState.Begin then
+            if Window then Window:Toggle() end
+        end
+    end)
+
+    function WindowMeta:AddTab(name, icon)
+        local btn = _new('TextButton')
+        btn.Size = UDim2.fromOffset(measure(name, 13) + 24, 32)
+        btn.BackgroundColor3 = theme.main2
+        btn.BorderSizePixel = 0
+        btn.Text = name
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 13
+        btn.TextColor3 = theme.font
+        btn.TextXAlignment = Enum.TextXAlignment.Center
+        corner(btn, 7)
+        local btnStroke = stroke(btn, theme.outline, 1)
+        btn.Parent = self._tabRow
+
+        local function makeCanvas(noScroll)
+            local sf = _new('ScrollingFrame')
+            sf.Size = UDim2.new(1, 0, 1, 0)
+            sf.BackgroundTransparency = 1
+            sf.BorderSizePixel = 0
+            sf.ScrollBarThickness = 4
+            sf.ScrollBarImageColor3 = Color3.fromRGB(185, 185, 200)
+            sf.ScrollingDirection = Enum.ScrollingDirection.Y
+            sf.ScrollBarImageTransparency = 0.35
+            local pad = _new('UIPadding')
+            pad.PaddingTop = UDim.new(0, 4)
+            pad.PaddingBottom = UDim.new(0, 6)
+            -- thin side padding: enough for the outlines, keeps the sections
+            -- visually aligned with the tab row (less left/right margin)
+            pad.PaddingLeft = UDim.new(0, 2)
+            pad.PaddingRight = UDim.new(0, 5)  -- scrollbar side gets a bit more
+            pad.Parent = sf
+            local list = _new('UIListLayout')
+            list.Padding = UDim.new(0, 8)
+            list.SortOrder = Enum.SortOrder.LayoutOrder
+            list.Parent = sf
+            if noScroll then
+                -- LOG-STYLE CANVAS: no outer scrollbar — the canvas ALWAYS
+                -- fits its content, so the column never scrolls. Groupboxes
+                -- that want internal scrolling (Update Log) put their own
+                -- ScrollingFrame inside; the outer frame just lays out.
+                sf.ScrollBarThickness = 0
+                sf.ScrollingEnabled = false
+                local function updateCanvasFixed()
+                    pcall(function()
+                        local c = list.AbsoluteContentSize
+                        sf.CanvasSize = UDim2.new(0, c.X, 0, c.Y + pad.PaddingTop.Offset + pad.PaddingBottom.Offset)
+                    end)
+                end
+                list:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateCanvasFixed)
+                task.defer(updateCanvasFixed)
+                return sf, list
+            end
+            -- AutomaticCanvasSize is unreliable on some clients — size the
+            -- canvas manually from the list layout so content never clips
+            local function updateCanvas()
+                pcall(function()
+                    local c = list.AbsoluteContentSize
+                    sf.CanvasSize = UDim2.new(0, c.X, 0, c.Y + pad.PaddingTop.Offset + pad.PaddingBottom.Offset)
+                end)
+            end
+            list:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateCanvas)
+            task.defer(updateCanvas)
+            return sf, list
+        end
+
+        local tab: any = {
+            _name = name,
+            _btn = btn,
+            _left = _new('ScrollingFrame'),
+            _right = _new('ScrollingFrame'),
+            _visible = false,
+            _owner = self,
+        }
+        tab._left = makeCanvas()
+        tab._right = makeCanvas()
+        -- parent the canvases NOW (hidden) instead of lazily on first Show:
+        -- a never-shown tab's elements must still be descendants of the
+        -- window root, or the fade skips them, their base transparencies
+        -- are never recorded, and after a close/reopen they come back
+        -- stuck invisible ("sections deleted on the other tab")
+        tab._left.Parent = self._left
+        tab._right.Parent = self._right
+        tab._left.Visible = false
+        tab._right.Visible = false
+
+        local TabMeta = {}
+        TabMeta.__index = TabMeta
+
+        -- banner: a full-width section ABOVE the left/right columns (per-tab).
+        -- The host frame lives on the WINDOW and shows only the active tab's
+        -- banner; the columns shift down while a banner is visible.
+        tab._banner = nil
+
+        local function applyBannerHeight()
+            local h = 0
+            if tab._visible and tab._banner then
+                h = tab._banner.AbsoluteSize.Y
+            end
+            self._left.Position = UDim2.new(0, 0, 0, h)
+            self._right.Position = UDim2.new(0.5, 7, 0, h)
+            self._left.Size = UDim2.new(0.5, -7, 1, -h)
+            self._right.Size = UDim2.new(0.5, -7, 1, -h)
+        end
+
+        function TabMeta:AddBanner()
+            local f = _new('Frame')
+            f.Size = UDim2.new(1, 0, 0, 76)
+            f.AutomaticSize = Enum.AutomaticSize.Y
+            f.BackgroundTransparency = 1
+            f.Visible = false
+            tab._banner = f
+            f:GetPropertyChangedSignal('AbsoluteSize'):Connect(applyBannerHeight)
+            local BannerMeta = {}
+            BannerMeta.__index = BannerMeta
+            -- welcome layout: TITLE + sub CENTERED in the full banner width,
+            -- icon tucked just left of the title (its position follows the
+            -- title's real width once text bounds settle). topPad gives the
+            -- banner air; the sub hugs the title (small gap).
+            function BannerMeta:SetText(main, sub, icon, opts)
+                opts = opts or {}
+                for _, c in ipairs(f:GetChildren()) do
+                    if c:IsA('Frame') then c:Destroy() end
+                end
+                local topPad = _new('Frame')
+                topPad.Size = UDim2.new(1, 0, 0, opts.topMargin or 14)
+                topPad.BackgroundTransparency = 1
+                topPad.Parent = f
+                local row = _new('Frame')
+                row.Size = UDim2.new(1, -8, 0, 60)
+                row.AutomaticSize = Enum.AutomaticSize.Y
+                row.BackgroundTransparency = 1
+                row.Parent = f
+                -- title auto-sizes tightly to its glyphs (no fixed 30px box —
+                -- the box's dead space was what made the sub look far away)
+                local title = newFont(21, true)
+                title.Size = UDim2.new(1, 0, 0, 0)
+                title.AutomaticSize = Enum.AutomaticSize.Y
+                title.AnchorPoint = Vector2.new(0.5, 0)
+                title.Position = UDim2.fromScale(0.5, 0)
+                title.Text = main or ''
+                title.TextColor3 = theme.font
+                title.TextXAlignment = Enum.TextXAlignment.Center
+                title.Parent = row
+                if icon then
+                    -- user avatar: Players:GetUserThumbnailAsync at a big
+                    -- size; falls back to the passed asset id on failure
+                    local ic = makeIcon(icon, 52)
+                    ic.AnchorPoint = Vector2.new(1, 0)
+                    ic.Position = UDim2.new(0.5, -math.max(title.TextBounds.X / 2) - 12, 0, 0)
+                    ic.Parent = row
+                    title:GetPropertyChangedSignal('TextBounds'):Connect(function()
+                        ic.Position = UDim2.new(0.5, -math.floor(title.TextBounds.X / 2) - 12, 0, 0)
+                    end)
+                    if opts.avatarUser then
+                        task.spawn(function()
+                            local Players = game:GetService('Players')
+                            local okT, thumb = pcall(function()
+                                return Players:GetUserThumbnailAsync(opts.avatarUser,
+                                    Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+                            end)
+                            if okT and thumb then
+                                local img = ic:FindFirstChildWhichIsA('ImageLabel', true)
+                                if img then img.Image = thumb end
+                            end
+                        end)
+                    end
+                end
+                if sub then
+                    -- glued to the title: tracks the title's REAL rendered
+                    -- height and sits 2px under it
+                    local subL = newFont(14)
+                    subL.Size = UDim2.new(1, 0, 0, 18)
+                    subL.AnchorPoint = Vector2.new(0.5, 0)
+                    subL.Position = UDim2.new(0.5, 0, 0, math.max(1, title.TextBounds.Y) + 2)
+                    subL.Text = sub
+                    subL.TextColor3 = theme.dim
+                    subL.TextXAlignment = Enum.TextXAlignment.Center
+                    subL.Parent = row
+                    title:GetPropertyChangedSignal('TextBounds'):Connect(function()
+                        subL.Position = UDim2.new(0.5, 0, 0, math.max(1, title.TextBounds.Y) + 2)
+                    end)
+                end
+                local bottomPad = _new('Frame')
+                bottomPad.Size = UDim2.new(1, 0, 0, 8)
+                bottomPad.BackgroundTransparency = 1
+                bottomPad.Parent = f
+            end
+            -- if this tab is ALREADY the visible one (first tab), the banner
+            -- must appear NOW — waiting for the next Show() left the first
+            -- tab's banner invisible until the user tabbed away and back
+            if tab._visible then
+                f.Parent = self._owner._bannerHost
+                f.Visible = true
+                task.defer(applyBannerHeight)
+            end
+            return setmetatable({ Container = f }, BannerMeta)
+        end
+
+        function TabMeta:Show()
+            if tab._visible then return end
+            tab._visible = true
+            for _, t in ipairs(self._owner._tabs) do
+                if t ~= tab then t:Hide() end
+            end
+            tab._left.Parent = self._owner._left
+            tab._right.Parent = self._owner._right
+            tab._left.Visible = true
+            tab._right.Visible = true
+            tab._btn.BackgroundColor3 = theme.accent
+            tab._btn.TextColor3 = Color3.new(1, 1, 1)
+            btnStroke.Color = theme.accent2
+            -- banner: only this tab's banner shows in the shared host
+            local host = self._owner._bannerHost
+            for _, t in ipairs(self._owner._tabs) do
+                if t._banner and t._banner.Parent == host then t._banner.Visible = false end
+            end
+            if tab._banner then
+                tab._banner.Parent = host
+                tab._banner.Visible = true
+            end
+            task.defer(applyBannerHeight)
+        end
+
+        function TabMeta:Hide()
+            tab._visible = false
+            tab._left.Visible = false
+            tab._right.Visible = false
+            tab._btn.BackgroundColor3 = theme.main2
+            tab._btn.TextColor3 = theme.font
+            btnStroke.Color = theme.outline
+            if tab._banner then tab._banner.Visible = false end
+            applyBannerHeight()
+        end
+
+        tab._banner = nil
+
+        function TabMeta:AddLeftGroupbox(name, icon, opts)
+            local gb = GroupboxFactory(tab._left, name, icon)
+            if opts and opts.innerScrollHeight then
+                gb:UseInnerScroll(opts.innerScrollHeight)
+            end
+            return gb
+        end
+        function TabMeta:AddRightGroupbox(name, icon, opts)
+            local gb = GroupboxFactory(tab._right, name, icon)
+            if opts and opts.innerScrollHeight then
+                gb:UseInnerScroll(opts.innerScrollHeight)
+            end
+            return gb
+        end
+
+        tab = setmetatable(tab, TabMeta)
+        table.insert(self._tabs, tab)
+        btn.Activated:Connect(function()
+            tab:Show()
+        end)
+        if #self._tabs == 1 then
+            tab:Show()
+        end
+        return tab
+    end
+
+    function WindowMeta:AddDialog(idx, info)
+        local overlay = _new('Frame')
+        overlay.Size = UDim2.new(1, 0, 1, 0)
+        overlay.BackgroundColor3 = theme.dark
+        overlay.BackgroundTransparency = 1
+        overlay.BorderSizePixel = 0
+        overlay.ZIndex = 60
+        overlay.Parent = self._root
+
+        local dlg = _new('Frame')
+        dlg.Size = UDim2.fromOffset(info.Width or 380, 150)
+        dlg.AnchorPoint = Vector2.new(0.5, 0.5)
+        dlg.Position = UDim2.fromScale(0.5, 0.5)
+        dlg.BackgroundColor3 = theme.main
+        dlg.BorderSizePixel = 0
+        corner(dlg, 10)
+        stroke(dlg, theme.outline, 1)
+        dlg.ZIndex = 61
+        dlg.Parent = overlay
+
+        local title = newFont(17)
+        title.Size = UDim2.new(1, -28, 0, 24)
+        title.Position = UDim2.fromOffset(14, 14)
+        title.Text = info.Title or 'Dialog'
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.ZIndex = 62
+        title.Parent = dlg
+
+        local desc = newFont(13)
+        desc.Size = UDim2.new(1, -28, 0, 60)
+        desc.Position = UDim2.fromOffset(14, 44)
+        desc.Text = info.Description or ''
+        desc.TextWrapped = true
+        desc.TextColor3 = theme.dim
+        desc.TextXAlignment = Enum.TextXAlignment.Left
+        desc.TextYAlignment = Enum.TextYAlignment.Top
+        desc.ZIndex = 62
+        desc.Parent = dlg
+
+        -- custom body rows (number inputs etc.) â€” they grow the dialog; the
+        -- footer buttons stay pinned to the bottom. Scrolls if rows overflow.
+        local body = _new('ScrollingFrame')  -- classic SF: the newer
+        -- UIScrollingFrame can't be created on some executors, so this uses
+        -- the same class the tabs use; CanvasSize is set manually in Resize
+        body.Size = UDim2.new(1, -28, 0, 0)
+        body.Position = UDim2.fromOffset(14, 104)
+        body.BackgroundTransparency = 1
+        body.BorderSizePixel = 0
+        body.ScrollBarThickness = 4
+        body.ScrollBarImageColor3 = theme.outline
+        body.ScrollingDirection = Enum.ScrollingDirection.Y
+        body.CanvasSize = UDim2.new(0, 0, 0, 0)
+        body.ZIndex = 62
+        body.Parent = dlg
+        -- pad the row area so each row's 1px UIStroke has room to render;
+        -- a ScrollingFrame clips at its viewport edges, so a full-width row
+        -- loses its top/left/right border lines
+        local bodyPad = _new('UIPadding')
+        bodyPad.PaddingTop = UDim.new(0, 4)
+        bodyPad.PaddingBottom = UDim.new(0, 4)
+        bodyPad.PaddingLeft = UDim.new(0, 4)
+        bodyPad.PaddingRight = UDim.new(0, 4)
+        bodyPad.Parent = body
+        local bodyList = _new('UIListLayout')
+        bodyList.SortOrder = Enum.SortOrder.LayoutOrder
+        bodyList.Padding = UDim.new(0, 8)
+        bodyList.Parent = body
+
+        local btnRow = _new('Frame')
+        btnRow.Size = UDim2.new(1, -28, 0, 36)
+        btnRow.Position = UDim2.new(0, 14, 1, -40)  -- lower margin, still inside the box
+        btnRow.BackgroundTransparency = 1
+        btnRow.ZIndex = 62
+        btnRow.Parent = dlg
+        local btnList = _new('UIListLayout')
+        btnList.FillDirection = Enum.FillDirection.Horizontal
+        btnList.HorizontalAlignment = Enum.HorizontalAlignment.Right
+        btnList.Padding = UDim.new(0, 8)
+        btnList.SortOrder = Enum.SortOrder.LayoutOrder
+        btnList.Parent = btnRow
+
+        local dialog = {
+            _overlay = overlay,
+            _dlg = dlg,
+            _desc = desc,
+            _body = body,
+            _bodyList = bodyList,
+            _bodyH = 0,
+            _w = info.Width or 380,
+            _btnRow = btnRow,
+            _buttons = {},
+        }
+        local DialogMeta = {}
+        DialogMeta.__index = DialogMeta
+
+        function DialogMeta:AddFooterButton(btnIdx, btnInfo)
+            local b = _new('TextButton')
+            b.Size = UDim2.fromOffset(68, 26)  -- ~75% of the old 90x34
+            b.BackgroundColor3 = btnInfo.Variant == 'Secondary' and theme.main2 or theme.accent
+            b.BorderSizePixel = 0
+            b.Text = btnInfo.Title or 'Button'
+            b.Font = Enum.Font.Gotham
+            b.TextSize = 12
+            b.TextColor3 = btnInfo.Variant == 'Secondary' and theme.font or Color3.new(1, 1, 1)
+            corner(b, 7)
+            if btnInfo.Variant == 'Secondary' then stroke(b, theme.outline, 1) end
+            b.ZIndex = 63
+            b.Parent = self._btnRow
+b.Activated:Connect(function()
+            if btnInfo.Callback then
+                local old=setthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(8) end
+                btnInfo.Callback()
+                if setthreadidentity then setthreadidentity(old) end
+            end
+            self:Dismiss()
+            end)
+            self._buttons[btnIdx] = b
+        end
+
+        function DialogMeta:Resize()
+            -- wrap-measure with TextService (TextBounds doesn't wrap on this
+            -- client) AND give the description a real height â€” a short label
+            -- never renders all its wrapped lines, so long requirement lists
+            -- (the "Are you sure?" popup) grow the dialog instead of hiding
+            local d = self._desc
+            local W = self._w or 380
+            local bodyH = self._bodyH or 0
+            local bounds = TPS:GetTextSize(d.Text, d.TextSize, d.Font, Vector2.new(W - 28, 1000))
+            -- an EMPTY description (dialogs that only have number rows) must
+            -- collapse the text area entirely â€” otherwise a 44px+ blank gap
+            -- sits between the title and the rows and the popup looks off
+            local hasDesc = d.Text ~= nil and d.Text ~= ''
+            if bodyH <= 0 then
+                -- no custom rows â€” keep the ORIGINAL sizing exactly, so
+                -- regular dialogs ("Are you sure?" etc.) stay unchanged
+                local h = math.max(150, bounds.Y + 96)
+                self._dlg.Size = UDim2.fromOffset(W, h)
+                if hasDesc then
+                    self._desc.Size = UDim2.new(1, -28, 0, math.max(60, h - 96))
+                else
+                    self._desc.Size = UDim2.new(1, -28, 0, 0)
+                end
+                self._btnRow.Position = UDim2.new(0, 14, 1, -40)
+                return
+            end
+            -- with custom rows: grow the dialog, cap the row area at 200px
+            -- and let the body scrollbar handle any overflow
+            local descH = hasDesc and math.max(44, bounds.Y + 12) or 0
+            local visibleBodyH = math.min(bodyH, 200)
+            local h = 14 + 24 + 10 + descH + 8 + visibleBodyH + 12 + 36 + 12
+            self._dlg.Size = UDim2.fromOffset(W, h)
+            self._desc.Size = UDim2.new(1, -28, 0, descH)
+            self._body.Size = UDim2.new(1, -28, 0, visibleBodyH)
+            self._body.Position = UDim2.new(0, 14, 0, 14 + 24 + 10 + descH)
+            self._body.CanvasSize = UDim2.fromOffset(0, math.max(0, bodyH) + 8)  -- + padding top/bottom
+            self._btnRow.Position = UDim2.new(0, 14, 1, -40)
+        end
+
+        -- 2nd-type text holder: a row that looks like a button â€” title on
+        -- the left, a small numeric input on the right (used by the Auto
+        -- Farm job config popup). Sanitizes to digits and clamps Min/Max.
+        function DialogMeta:AddNumberRow(id, info)
+            info = info or {}
+            local row = _new('Frame')
+            row.Size = UDim2.new(1, -8, 0, 32)  -- inset so the stroke fits inside the padded body
+            row.BackgroundColor3 = theme.main2
+            row.BorderSizePixel = 0
+            corner(row, 7)
+            stroke(row, theme.outline, 1)
+            row.ZIndex = 62
+            row.Parent = self._body
+            local lbl = newFont(13)
+            lbl.Size = UDim2.new(1, -92, 0, 32)
+            lbl.Position = UDim2.fromOffset(10, 0)
+            lbl.Text = info.Text or 'Value'
+            lbl.TextColor3 = theme.font
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.ZIndex = 63
+            lbl.Parent = row
+            local box = _new('TextBox')
+            box.Size = UDim2.fromOffset(66, 24)
+            box.Position = UDim2.new(1, -76, 0, 4)
+            box.BackgroundColor3 = theme.dark
+            box.BorderSizePixel = 0
+            box.Font = Enum.Font.Code
+            box.TextSize = 13
+            box.TextColor3 = Color3.new(1, 1, 1)
+            box.TextXAlignment = Enum.TextXAlignment.Center
+            corner(box, 6)
+            box.ZIndex = 63
+            box.Parent = row
+            local val = tostring(info.Default or '')
+            local function refresh()
+                box.Text = val
+            end
+            refresh()
+            box.FocusLost:Connect(function(enter)
+                local n = tonumber((tostring(box.Text):match('%d+')) or '')
+                if n then
+                    if info.Min then n = math.max(info.Min, n) end
+                    if info.Max then n = math.min(info.Max, n) end
+                    n = math.floor(n)
+                    val = tostring(n)
+                    refresh()
+                    if info.Callback then
+                        local old=setthreadidentity and getthreadidentity() or 2
+                        if setthreadidentity then setthreadidentity(8) end
+                        info.Callback(n)
+                        if setthreadidentity then setthreadidentity(old) end
+                    end
+                else
+                    refresh() -- revert to the last good value
+                end
+            end)
+            self._bodyH = (self._bodyH or 0) + 32 + 8  -- matches UIListLayout Padding
+            self:Resize()
+            return {
+                GetValue = function() return tonumber(val) end,
+                SetValue = function(n)
+                    val = tostring(math.floor(tonumber(n) or 0))
+                    refresh()
+                end,
+            }
+        end
+
+        -- 2nd-type toggle holder: the same button-like row as AddNumberRow but with
+        -- a switch on the right (used by the Auto Farm job config popup). The
+        -- Callback may return `false` to refuse the flip (e.g. a bad game state) and
+        -- the row reverts itself automatically.
+        function DialogMeta:AddToggleRow(id, info)
+            info = info or {}
+            local row = _new('Frame')
+            row.Size = UDim2.new(1, -8, 0, 32)  -- inset so the stroke fits inside the padded body
+            row.BackgroundColor3 = theme.main2
+            row.BorderSizePixel = 0
+            corner(row, 7)
+            stroke(row, theme.outline, 1)
+            row.ZIndex = 62
+            row.Parent = self._body
+            local lbl = newFont(13)
+            lbl.Size = UDim2.new(1, -56, 0, 32)
+            lbl.Position = UDim2.fromOffset(10, 0)
+            lbl.Text = info.Text or 'Toggle'
+            lbl.TextColor3 = theme.font
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.ZIndex = 63
+            lbl.Parent = row
+            local bg = _new('Frame')
+            bg.Size = UDim2.fromOffset(40, 22)
+            bg.Position = UDim2.new(1, -48, 0, 5)
+            bg.BackgroundColor3 = theme.main2
+            bg.BorderSizePixel = 0
+            corner(bg, 11)
+            stroke(bg, theme.outline, 1)
+            bg.ZIndex = 63
+            bg.Parent = row
+            local knob = _new('Frame')
+            knob.Size = UDim2.fromOffset(18, 18)
+            knob.Position = UDim2.fromOffset(2, 2)
+            knob.BackgroundColor3 = theme.dim
+            knob.BorderSizePixel = 0
+            corner(knob, 9)
+            knob.ZIndex = 64
+            knob.Parent = bg
+            local value = info.Default == true
+            local function apply()
+                if value then
+                    tween(bg, { BackgroundColor3 = theme.accent }, 0.2)
+                    tween(knob, { Position = UDim2.fromOffset(20, 2), BackgroundColor3 = Color3.new(1, 1, 1) }, 0.2)
+                else
+                    tween(bg, { BackgroundColor3 = theme.main2 }, 0.2)
+                    tween(knob, { Position = UDim2.fromOffset(2, 2), BackgroundColor3 = theme.dim }, 0.2)
+                end
+            end
+            apply()
+            local btn = _new('TextButton')
+            btn.Size = UDim2.new(1, 0, 0, 32)
+            btn.BackgroundTransparency = 1
+            btn.BorderSizePixel = 0
+            btn.Text = ''
+            btn.ZIndex = 64
+            btn.Parent = row
+            btn.Activated:Connect(function()
+                value = not value
+                apply()
+                if info.Callback then
+                    local old=setthreadidentity and getthreadidentity() or 2
+                    if setthreadidentity then setthreadidentity(8) end
+                    local keep = info.Callback(value)
+                    if setthreadidentity then setthreadidentity(old) end
+                    if keep == false then  -- refused -> flip back
+                        value = not value
+                        apply()
+                    end
+                end
+            end)
+            self._bodyH = (self._bodyH or 0) + 32 + 8  -- matches UIListLayout Padding
+            self:Resize()
+            return {
+                Value = value,
+                SetValue = function(_, v)
+                    value = v == true
+                    apply()
+                end,
+            }
+        end
+
+        function DialogMeta:Dismiss()
+            local o = self._overlay
+            local d = self._dlg
+            -- one shared fade driver: every element (backgrounds, text, strokes)
+            -- is moved from the SAME progress value, so nothing can drift out
+            -- of sync no matter how many elements the dialog has (firing 30+
+            -- separate tweens staggers text behind the box on some executors)
+            local bgs, texts, strokes = {}, {}, {}
+            local function collect(g)
+                if g:IsA('Frame') or g:IsA('TextButton') or g:IsA('TextBox') then
+                    bgs[#bgs+1] = g
+                end
+                if g:IsA('TextLabel') or g:IsA('TextButton') or g:IsA('TextBox') then
+                    texts[#texts+1] = g
+                end
+                if g:IsA('UIStroke') then
+                    strokes[#strokes+1] = g
+                end
+                for _, c in ipairs(g:GetChildren()) do collect(c) end
+            end
+            collect(d)
+            local baseB = {}
+            for i, g in ipairs(bgs) do baseB[i] = g.BackgroundTransparency end
+            local baseT = {}
+            for i, g in ipairs(texts) do baseT[i] = g.TextTransparency end
+            local baseS = {}
+            for i, g in ipairs(strokes) do baseS[i] = g.Transparency end
+            local baseO = o.BackgroundTransparency
+            local dur = 0.18
+            local t0 = tick()
+            local conn
+            conn = RunService.Heartbeat:Connect(function()
+                local p = math.min(1, (tick() - t0) / dur)
+                p = 1 - (1 - p) * (1 - p)  -- quad out, same feel as the tweens
+                o.BackgroundTransparency = baseO + (1 - baseO) * p
+                for i, g in ipairs(bgs) do g.BackgroundTransparency = baseB[i] + (1 - baseB[i]) * p end
+                for i, g in ipairs(texts) do g.TextTransparency = baseT[i] + (1 - baseT[i]) * p end
+                for i, g in ipairs(strokes) do g.Transparency = baseS[i] + (1 - baseS[i]) * p end
+                if p >= 1 then
+                    conn:Disconnect()
+                    o:Destroy()
+                end
+            end)
+        end
+
+        tween(overlay, { BackgroundTransparency = 0.6 }, 0.2)
+        return setmetatable(dialog, DialogMeta)
+    end
+
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- GROUPBOX (section) â€” Obsidian-style: icon + title row, divider line,
+    -- content below with padding. Auto-sizing: the box always fits its
+    -- content (custom frames parented to .Container included), so nothing
+    -- is ever clipped or overlapping.
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    local GroupboxMeta = {}
+    GroupboxMeta.__index = GroupboxMeta
+
+    -- icon size tuning: read once from the caller's global so a build can
+    -- pick a size, then live-resizable via PongiUI:SetGroupboxIconSize().
+    -- Only the ICON IMAGE resizes; the header row stays a fixed 34px.
+    local GROUPBOX_ICON_SIZE = tonumber(_G and _G.PONGI_GROUPBOX_ICON_SIZE) or 25
+    local registeredGroupboxIcons = {}
+
+    GroupboxFactory = function(parent, name, icon)
+        local gb = _new('Frame')
+        -- side space comes from the scroll frame's UIPadding (the layout
+        -- overrides child X positions, so insetting here would not hold)
+        gb.Size = UDim2.new(1, 0, 0, 0)
+        gb.AutomaticSize = Enum.AutomaticSize.Y
+        gb.BackgroundColor3 = theme.bg
+        gb.BorderSizePixel = 0
+        corner(gb, 8)
+        stroke(gb, theme.outline, 1)
+        gb.Parent = parent
+        local gbList = _new('UIListLayout')
+        gbList.SortOrder = Enum.SortOrder.LayoutOrder
+        gbList.Parent = gb
+
+        -- title row: icon + title + divider line. The HEAD stays a fixed
+        -- 34px; only the icon IMAGE size is tunable (bigger icons sit
+        -- centered and may overflow the row â€” fine while finding the size).
+        local isize = GROUPBOX_ICON_SIZE
+        local headH = 34
+        local head = _new('Frame')
+        head.Size = UDim2.new(1, 0, 0, headH)
+        head.BackgroundTransparency = 1
+        head.Parent = gb
+        if icon then
+            local ic = makeIcon(icon, isize)
+            ic.Position = UDim2.fromOffset(10, math.max(0, (headH - isize) / 2))
+            ic.Parent = head
+            registeredGroupboxIcons[#registeredGroupboxIcons + 1] = {
+                holder = ic,
+                head = head,
+                title = nil,
+                hasIcon = true,
+                isize = isize,
+            }
+        end
+        local title = newFont(15)
+        title.Size = UDim2.new(1, -36, 0, 22)
+        title.Position = UDim2.fromOffset(icon and 46 or 12, 6)
+        title.Text = name or 'Groupbox'
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = head
+        -- attach the title ref to the icon entry so live resize can move it
+        if icon and #registeredGroupboxIcons > 0 then
+            registeredGroupboxIcons[#registeredGroupboxIcons].title = title
+        end
+        local line = _new('Frame')
+        line.Size = UDim2.new(1, -16, 0, 1)
+        line.Position = UDim2.new(0, 8, 1, -1)
+        line.BackgroundColor3 = theme.outline
+        line.BorderSizePixel = 0
+        line.Parent = head
+
+        -- content container: padded (7px all around, 8px gaps) and auto-sized
+        local container = _new('Frame')
+        container.Size = UDim2.new(1, 0, 0, 0)
+        container.AutomaticSize = Enum.AutomaticSize.Y
+        container.BackgroundTransparency = 1
+        container.Parent = gb
+        local clist = _new('UIListLayout')
+        clist.Padding = UDim.new(0, 5)
+        clist.SortOrder = Enum.SortOrder.LayoutOrder
+        clist.Parent = container
+        local cpad = _new('UIPadding')
+        cpad.PaddingLeft = UDim.new(0, 7)
+        cpad.PaddingRight = UDim.new(0, 7)
+        cpad.PaddingTop = UDim.new(0, 4)
+        cpad.PaddingBottom = UDim.new(0, 4)
+        cpad.Parent = container
+
+        local groupbox = {
+            _gb = gb,
+            _head = head,
+            _title = title,
+            _container = container,
+            _list = clist,
+            _items = {},
+            _parent = parent,
+        }
+        groupbox.Container = container
+        return setmetatable(groupbox, GroupboxMeta)
+    end
+
+    -- auto-sizing makes manual resizing unnecessary; kept so existing call
+    -- sites (gbStatus:Resize() after parenting custom frames) stay safe
+    function GroupboxMeta:Resize()
+        pcall(function()
+            -- force a re-layout tick so AbsoluteContentSize settles
+            self._container.Size = self._container.Size
+        end)
+    end
+
+    -- INNER SCROLL: cap the groupbox at a fixed height and scroll its
+    -- container internally (Update Log style). Everything added afterwards
+    -- lands inside the scrollable area; the box frame itself stops growing.
+    function GroupboxMeta:UseInnerScroll(height)
+        local gb = self._gb
+        local container = self._container
+        -- re-parent everything currently in the container into a new
+        -- ScrollingFrame that replaces the container in the list
+        local sf = _new('ScrollingFrame')
+        sf.Size = UDim2.new(1, 0, 0, height)
+        sf.BackgroundTransparency = 1
+        sf.BorderSizePixel = 0
+        sf.ScrollBarThickness = 4
+        sf.ScrollBarImageColor3 = theme.outline
+        sf.ScrollingDirection = Enum.ScrollingDirection.Y
+        sf.ScrollBarImageTransparency = 0.35
+        sf.Parent = gb
+        local slist = _new('UIListLayout')
+        slist.Padding = UDim.new(0, 5)
+        slist.SortOrder = Enum.SortOrder.LayoutOrder
+        slist.Parent = sf
+        local spad = _new('UIPadding')
+        spad.PaddingLeft = UDim.new(0, 7)
+        spad.PaddingRight = UDim.new(0, 7)
+        spad.PaddingTop = UDim.new(0, 4)
+        spad.PaddingBottom = UDim.new(0, 4)
+        spad.Parent = sf
+        -- move existing children of container into sf (container keeps its
+        -- list/padding but goes empty — its auto-size collapses to ~8px)
+        for _, ch in ipairs(container:GetChildren()) do
+            if ch:IsA('Frame') or ch:IsA('TextLabel') or ch:IsA('TextButton') or ch:IsA('ScrollingFrame') then
+                ch.Parent = sf
+            end
+        end
+        -- future items land in sf: baseItem parents to groupbox._container,
+        -- so swap the container reference to the scroll frame
+        self._container = sf
+        self.Container = sf
+        -- keep the scroll canvas sized to its content
+        local function updateSF()
+            pcall(function()
+                local c = slist.AbsoluteContentSize
+                sf.CanvasSize = UDim2.new(0, c.X, 0, c.Y + spad.PaddingTop.Offset + spad.PaddingBottom.Offset)
+            end)
+        end
+        slist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateSF)
+        task.defer(updateSF)
+        -- the gb list must not stretch sf: it's a fixed-height row now
+        return self
+    end
+
+    local function baseItem(groupbox, height)
+        local f = _new('Frame')
+        f.Size = UDim2.new(1, 0, 0, height)
+        f.BackgroundTransparency = 1
+        f.Parent = groupbox._container
+        local item = { _h = height, _frame = f, _parent = groupbox }
+        table.insert(groupbox._items, item)
+        return item
+    end
+
+    -- every dropdown currently open, so opening one closes the rest
+    local openDropdowns = {}
+    local function closeAllDropdowns(except)
+        for i = #openDropdowns, 1, -1 do
+            local d = openDropdowns[i]
+            if d ~= except then
+                d:_close()
+            end
+        end
+    end
+
+    function GroupboxMeta:AddButton(info)
+        _maybeYield()
+        local item = baseItem(self, 34)
+        local b = _new('TextButton')
+        b.Size = UDim2.new(1, 0, 0, 30)
+        b.Position = UDim2.fromOffset(0, 2)
+        b.BackgroundColor3 = theme.main2
+        b.BorderSizePixel = 0
+        b.Text = info.Text or 'Button'
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 13
+        b.TextColor3 = theme.dim
+        b.TextXAlignment = Enum.TextXAlignment.Center
+        corner(b, 7)
+        stroke(b, theme.outline, 1)
+        b.Parent = item._frame
+        b.Activated:Connect(function()
+            if info.Func then
+                local old=setthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(8) end
+                info.Func()
+                if setthreadidentity then setthreadidentity(old) end
+            end
+        end)
+        b.MouseEnter:Connect(function()
+            tween(b, { BackgroundColor3 = theme.accent }, 0.15)
+            b.TextColor3 = Color3.new(1, 1, 1)
+        end)
+        b.MouseLeave:Connect(function()
+            tween(b, { BackgroundColor3 = theme.main2 }, 0.15)
+            b.TextColor3 = theme.dim
+        end)
+        item._btn = b
+        return item
+    end
+
+    function GroupboxMeta:AddToggle(id, info)
+        _maybeYield()
+        local item = baseItem(self, 34)
+        local lbl = newFont(13)
+        lbl.Size = UDim2.new(1, -52, 0, 30)
+        lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.Text = info.Text or 'Toggle'
+        lbl.TextColor3 = theme.dim
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = item._frame
+
+        local bg = _new('Frame')
+        bg.Size = UDim2.fromOffset(40, 22)
+        bg.Position = UDim2.new(1, -40, 0, 6)
+        bg.BackgroundColor3 = theme.main2
+        bg.BorderSizePixel = 0
+        corner(bg, 11)
+        stroke(bg, theme.outline, 1)
+        bg.Parent = item._frame
+        local knob = _new('Frame')
+        knob.Size = UDim2.fromOffset(18, 18)
+        knob.Position = UDim2.fromOffset(2, 2)
+        knob.BackgroundColor3 = theme.dim
+        knob.BorderSizePixel = 0
+        corner(knob, 9)
+        knob.Parent = bg
+
+        local value = info.Default == true
+        local function apply()
+            if value then
+                tween(bg, { BackgroundColor3 = theme.accent }, 0.2)
+                tween(knob, { Position = UDim2.fromOffset(20, 2), BackgroundColor3 = Color3.new(1, 1, 1) }, 0.2)
+            else
+                tween(bg, { BackgroundColor3 = theme.main2 }, 0.2)
+                tween(knob, { Position = UDim2.fromOffset(2, 2), BackgroundColor3 = theme.dim }, 0.2)
+            end
+        end
+        apply()
+
+        local toggleBtn = _new('TextButton')
+        toggleBtn.Size = UDim2.new(1, 0, 0, 30)
+        toggleBtn.BackgroundTransparency = 1
+        toggleBtn.BorderSizePixel = 0
+        toggleBtn.Text = ''
+        toggleBtn.Parent = item._frame
+        toggleBtn.Activated:Connect(function()
+            value = not value
+            apply()
+            if info.Callback then
+                -- a Callback may return `false` to refuse the flip (e.g. a
+                -- confirmation popup is pending); the toggle reverts itself
+                local old=setthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(8) end
+                local keep = info.Callback(value)
+                if setthreadidentity then setthreadidentity(old) end
+                if keep == false then
+                    value = not value
+                    apply()
+                end
+            end
+        end)
+
+        item.Value = value
+        item.SetValue = function(_, v)
+            value = v == true
+            apply()
+        end
+        return item
+    end
+
+    function GroupboxMeta:AddInput(id, info)
+        _maybeYield()
+        local item = baseItem(self, 56)
+        local lbl = newFont(12)
+        lbl.Size = UDim2.new(1, 0, 0, 16)
+        lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.Text = info.Text or 'Input'
+        lbl.TextColor3 = Color3.new(1, 1, 1)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = item._frame
+        local box = _new('TextBox')
+        box.Size = UDim2.new(1, 0, 0, 32)
+        box.Position = UDim2.fromOffset(0, 22)
+        box.BackgroundColor3 = theme.main2
+        box.BorderSizePixel = 0
+        box.PlaceholderText = ''
+        box.Font = Enum.Font.Gotham
+        box.TextSize = 13
+        box.TextColor3 = Color3.new(1, 1, 1)
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        corner(box, 7)
+        stroke(box, theme.outline, 1)
+        box.Parent = item._frame
+        -- 2px top/bottom margin like the buttons (label 2..18, box 22..54)
+        item._frame.Size = UDim2.new(1, 0, 0, 56)
+        -- fake placeholder: the hint is always visible in gray until the
+        -- user actually types (Roblox hides real placeholders on focus).
+        -- TextButton/TextBox have no Padding in this client, so a two-space
+        -- margin is baked into the text (stripped before the callback).
+        local hint = info.Placeholder or ''
+        local margin = '  '
+        local realText = ''
+        local function refresh()
+            if realText == '' then
+                box.Text = margin .. hint
+                box.TextColor3 = theme.dim
+            else
+                box.Text = margin .. realText
+                box.TextColor3 = Color3.new(1, 1, 1)
+            end
+        end
+        refresh()
+        box.Focused:Connect(function()
+            if realText == '' then
+                box.Text = margin
+                box.TextColor3 = theme.font
+            end
+        end)
+        box.FocusLost:Connect(function(enter)
+            local stripped = box.Text:gsub('^%s+', '')
+            realText = stripped
+            refresh()
+            if info.Callback then
+                local old=setthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(8) end
+                info.Callback(stripped, enter)
+                if setthreadidentity then setthreadidentity(old) end
+            end
+        end)
+        item._box = box
+        return item
+    end
+
+    function GroupboxMeta:AddDropdown(id, info)
+        _maybeYield()
+        local gb = self
+        -- 2px top/bottom margin like the buttons (label 2..18, display 20..52)
+        local item = baseItem(gb, 54)
+        local lbl = newFont(12)
+        lbl.Size = UDim2.new(1, 0, 0, 16)
+        lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.Text = info.Text or 'Dropdown'
+        lbl.TextColor3 = Color3.new(1, 1, 1)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = item._frame
+
+        local current = info.Default or ''
+        local display = _new('TextButton')
+        display.Size = UDim2.new(1, 0, 0, 32)
+        display.Position = UDim2.fromOffset(0, 20)
+        display.BackgroundColor3 = theme.bg
+        display.BorderSizePixel = 0
+        display.Text = '  ' .. current
+        display.Font = Enum.Font.Gotham
+        display.TextSize = 13
+        display.TextColor3 = Color3.new(1, 1, 1)
+        display.TextXAlignment = Enum.TextXAlignment.Left
+        display.TextTruncate = Enum.TextTruncate.AtEnd
+        corner(display, 7)
+        stroke(display, theme.outline, 1)
+        display.Parent = item._frame
+
+        local chev = newFont(13)
+        chev.Size = UDim2.fromOffset(26, 32)
+        chev.Position = UDim2.new(1, -30, 0, 0)
+        chev.Text = 'v'
+        chev.TextColor3 = theme.dim
+        chev.Parent = display
+
+        local menu = _new('Frame')
+        menu.Size = UDim2.new(0, 0, 0, 0)
+        menu.BackgroundColor3 = theme.bg
+        menu.BorderSizePixel = 0
+        menu.Visible = false
+        corner(menu, 7)
+        stroke(menu, theme.outline, 1)
+        -- OVERLAY: the menu is parented to the WINDOW ROOT (not item._frame) so
+        -- opening it floats on top of the GUI instead of pushing buttons below
+        -- down. We find the root by walking up from the groupbox.
+        local menuOverlayRoot = nil
+        do
+            local p = gb._gb
+            while p do
+                if p.Parent and p.Parent:IsA('ScreenGui') then
+                    menuOverlayRoot = p
+                    break
+                end
+                p = p.Parent
+            end
+        end
+        if not menuOverlayRoot then menuOverlayRoot = gb._gb end
+        menuOverlayRoot = menuOverlayRoot or item._frame
+        -- ZIndex below the topbar (60) so the dropdown never covers it, but
+        -- above the body content (1) so it floats over the scroll area.
+        menu.ZIndex = 40
+        menu.Parent = menuOverlayRoot
+        -- search field at the top of the dropdown. A wrapper gives the gray box
+        -- EQUAL margins on both sides (UIListLayout pins direct children to the
+        -- left, so a negative width only shrank the right side).
+        local searchWrap = _new('Frame')
+        searchWrap.LayoutOrder = 0
+        searchWrap.Size = UDim2.new(1, 0, 0, 32)
+        searchWrap.BackgroundTransparency = 1
+        searchWrap.BorderSizePixel = 0
+        searchWrap.Parent = menu
+        local searchBox = _new('TextBox')
+        searchBox.Size = UDim2.new(1, -12, 0, 26)
+        searchBox.Position = UDim2.fromOffset(6, 3)
+        searchBox.BackgroundColor3 = theme.main2
+        searchBox.BorderSizePixel = 0
+        corner(searchBox, 5)
+        searchBox.PlaceholderText = 'Search...'
+        searchBox.PlaceholderColor3 = theme.dim
+        searchBox.Text = ''
+        searchBox.TextColor3 = Color3.new(1, 1, 1)
+        searchBox.Font = Enum.Font.Gotham
+        searchBox.TextSize = 13
+        searchBox.TextXAlignment = Enum.TextXAlignment.Left
+        searchBox.TextTruncate = Enum.TextTruncate.AtEnd
+        searchBox.ClearTextOnFocus = false
+        -- text + caret insets from the box's left edge to align with the option
+        -- list (options use a 3-space indent). PaddingRight keeps symmetric.
+        local sPad = _new('UIPadding')
+        sPad.PaddingLeft = UDim.new(0, 16)
+        sPad.PaddingRight = UDim.new(0, 6)
+        sPad.Parent = searchBox
+        searchBox.Parent = searchWrap
+        local menuList = _new('UIListLayout')
+        menuList.Padding = UDim.new(0, 2)
+        menuList.SortOrder = Enum.SortOrder.LayoutOrder
+        menuList.Parent = menu
+        local menuPad = _new('UIPadding')
+        menuPad.PaddingLeft = UDim.new(0, 2)
+        menuPad.PaddingRight = UDim.new(0, 2)
+        menuPad.PaddingTop = UDim.new(0, 3)
+        menuPad.PaddingBottom = UDim.new(0, 2)
+        menuPad.Parent = menu
+        -- options live in a scrollable list (max ~4 visible rows) so long
+        -- dropdowns don't blow past the window
+        local optScroll = _new('ScrollingFrame')
+        optScroll.LayoutOrder = 1
+        optScroll.Size = UDim2.new(1, 0, 0, 124)
+        optScroll.Position = UDim2.fromOffset(0, 0)
+        optScroll.BackgroundTransparency = 1
+        optScroll.BorderSizePixel = 0
+        optScroll.ScrollBarThickness = 4
+        optScroll.ScrollBarImageColor3 = theme.outline
+        optScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+        optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        optScroll.Parent = menu
+        local optList = _new('UIListLayout')
+        optList.Padding = UDim.new(0, 2)
+        optList.SortOrder = Enum.SortOrder.LayoutOrder
+        optList.Parent = optScroll
+        local optPad = _new('UIPadding')
+        optPad.PaddingLeft = UDim.new(0, 1)
+        optPad.PaddingRight = UDim.new(0, 1)
+        optPad.Parent = optScroll
+
+        -- resize the scroll list + menu to fit the option count (max 4 visible)
+        local function setListHeight(n)
+            local listH = math.min(math.max(0, n * 30 - 2), 124)
+            optScroll.Size = UDim2.new(1, 0, 0, listH)
+            -- menu = search wrapper (32) + padding (5) + list + gap (2)
+            menu.Size = UDim2.new(0, math.max(120, display.AbsoluteSize.X),
+                0, 37 + 2 + listH)
+        end
+
+        local values = {}
+        for _, v in ipairs(info.Values or {}) do
+            table.insert(values, v)
+        end
+
+        local dropdown = {
+            _close = function() end,
+        }
+
+        local function close()
+            if not menu.Visible then return end
+            menu.Visible = false
+            chev.Text = 'v'
+            for i = #openDropdowns, 1, -1 do
+                if openDropdowns[i] == dropdown then
+                    table.remove(openDropdowns, i)
+                end
+            end
+        end
+        dropdown._close = close
+
+        -- rebuild the option buttons from a (possibly filtered) list
+        local function renderOptions(list)
+            for _, c in ipairs(optScroll:GetChildren()) do
+                if c:IsA('TextButton') then c:Destroy() end
+            end
+            for _, v in ipairs(list) do
+                local opt = _new('TextButton')
+                opt.LayoutOrder = 1
+                opt.Size = UDim2.new(1, 0, 0, 28)
+                opt.Position = UDim2.fromOffset(0, 0)
+                opt.BackgroundColor3 = theme.accent
+                opt.BackgroundTransparency = 1
+                opt.BorderSizePixel = 0
+                corner(opt, 6)
+                opt.Text = '   ' .. tostring(v)
+                opt.Font = Enum.Font.Gotham
+                opt.TextSize = 13
+                opt.TextColor3 = v == current and theme.accent or theme.font
+                opt.TextXAlignment = Enum.TextXAlignment.Left
+                opt.Parent = optScroll
+                opt.MouseEnter:Connect(function()
+                    tween(opt, { BackgroundTransparency = 0 }, 0.12)
+                    opt.TextColor3 = Color3.new(1, 1, 1)
+                end)
+                opt.MouseLeave:Connect(function()
+                    tween(opt, { BackgroundTransparency = 1 }, 0.12)
+                    opt.TextColor3 = v == current and theme.accent or theme.font
+                end)
+                opt.Activated:Connect(function()
+                    current = v
+                    display.Text = '  ' .. tostring(current)
+                    close()
+                    if info.Callback then
+                        local old=setthreadidentity and getthreadidentity() or 2
+                        if setthreadidentity then setthreadidentity(8) end
+                        info.Callback(current)
+                        if setthreadidentity then setthreadidentity(old) end
+                    end
+                end)
+            end
+        end
+
+        -- keep the menu glued to the display as the window scrolls (the menu is
+        -- parented to the window root, so its position must track the display's
+        -- absolute position which moves when the parent ScrollingFrame scrolls)
+        local function reposition()
+            if not menu.Visible then return end
+            local disp = display.AbsolutePosition
+            local rootAbs = menuOverlayRoot.AbsolutePosition
+            local baseX = disp.X - rootAbs.X
+            local baseY = disp.Y - rootAbs.Y + 34
+            menu.Position = UDim2.fromOffset(math.max(0, baseX), math.max(0, baseY))
+        end
+        display:GetPropertyChangedSignal('AbsolutePosition'):Connect(reposition)
+        if display.Parent then
+            pcall(function()
+                local par = display.Parent
+                while par do
+                    if par:IsA('ScrollingFrame') then
+                        par:GetPropertyChangedSignal('CanvasPosition'):Connect(reposition)
+                        break
+                    end
+                    par = par.Parent
+                end
+            end)
+        end
+
+        local function open()
+            if menu.Visible then
+                close()
+                return
+            end
+            closeAllDropdowns(dropdown)
+            -- position the menu BEFORE it becomes visible (reposition() early-returns
+            -- while hidden)
+            local disp = display.AbsolutePosition
+            local rootAbs = menuOverlayRoot.AbsolutePosition
+            menu.Position = UDim2.fromOffset(
+                math.max(0, disp.X - rootAbs.X),
+                math.max(0, disp.Y - rootAbs.Y + 34))
+            searchBox.Text = ''
+            renderOptions(values)
+            setListHeight(#values)
+            menu.Visible = true
+            chev.Text = '^'
+            table.insert(openDropdowns, dropdown)
+        end
+
+        display.Activated:Connect(function()
+            open()
+        end)
+
+        searchBox.FocusLost:Connect(function(enter)
+            if enter then close() end
+        end)
+        searchBox:GetPropertyChangedSignal('Text'):Connect(function()
+            if not menu.Visible then return end
+            local q = string.lower(searchBox.Text or '')
+            local filtered = {}
+            for _, v in ipairs(values) do
+                if q == '' or string.lower(tostring(v)):find(q, 1, true) then
+                    table.insert(filtered, v)
+                end
+            end
+            renderOptions(filtered)
+            setListHeight(#filtered)
+        end)
+
+        -- click outside the dropdown closes it (bounds = display + open menu)
+        UserInputService.InputBegan:Connect(function(input)
+            if menu.Visible and input.UserInputType == Enum.UserInputType.MouseButton1 then
+                task.wait()
+                if not display:IsDescendantOf(ScreenGui) then return end
+                local mouse = Players.LocalPlayer:GetMouse()
+                local pos = Vector2.new(mouse.X, mouse.Y)
+                local rel = display.AbsolutePosition
+                local sz = display.AbsoluteSize
+                local msz = menu.AbsoluteSize
+                local top = rel.Y - 20
+                local bottom = rel.Y + 34 + msz.Y + 4
+                if pos.X < rel.X or pos.X > rel.X + sz.X or pos.Y < top or pos.Y > bottom then
+                    close()
+                end
+            end
+        end)
+
+        item.SetValue = function(_, v)
+            current = v
+            display.Text = '  ' .. tostring(current)
+        end
+        item.SetValues = function(_, list)
+            values = {}
+            for _, v in ipairs(list) do
+                table.insert(values, v)
+            end
+        end
+        return item
+    end
+
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- KEY PICKER â€” records a key on click, fires Changed, and becomes the
+    -- window toggle when the script sets PongiUI.ToggleKeybind to it.
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    local KeyPickerMeta = {}
+    KeyPickerMeta.__index = KeyPickerMeta
+    function KeyPickerMeta:Update() end
+
+    function KeyPickerMeta:Capture()
+        if self._picker then
+            self._picker.Activated:Fire()
+        end
+    end
+
+    function KeyPickerMeta:DoClick()
+        if self._picker then
+            self._picker.Activated:Fire()
+        end
+    end
+
+    local keyPicker = function(label, id, info)
+        -- keys arrive as Enum.KeyCode, 'RightControl', or the full
+        -- 'Enum.KeyCode.RightControl' path (what tostring produced in some
+        -- environments) â€” normalize everything to the Enum so the toggle
+        -- listener can compare input.KeyCode == kb._key
+        local function coerceKey(k)
+            if typeof(k) == 'EnumItem' then return k end
+            if type(k) == 'string' then
+                local short = k:match('Enum%.KeyCode%.(.+)$') or k
+                return Enum.KeyCode[short]
+            end
+            return nil
+        end
+        local picker = _new('TextButton')
+        picker.Size = UDim2.fromOffset(110, 26)
+        picker.Position = UDim2.new(1, -118, 0, 3)
+        picker.BackgroundColor3 = theme.main2
+        picker.BorderSizePixel = 0
+        picker.TextTruncate = Enum.TextTruncate.AtEnd
+        picker.Font = Enum.Font.Gotham
+        picker.TextSize = 12
+        picker.TextColor3 = theme.font
+        corner(picker, 6)
+        stroke(picker, theme.outline, 1)
+        picker.Parent = label._frame
+
+        local listening = false
+        local captured = coerceKey(info.Default) or Enum.KeyCode.RightControl
+        picker.Text = '[' .. captured.Name .. ']'
+        local self = setmetatable({
+            _picker = picker,
+            _key = captured,
+            _frame = label._frame,
+            DisplayValue = captured,
+        }, KeyPickerMeta)
+        function self:SetValue(v, noEvent)
+            local k = coerceKey(v)
+            if k then
+                captured = k
+                self._key = k
+                picker.Text = '[' .. k.Name .. ']'
+            end
+            if not noEvent and info.Changed then
+                info.Changed(k and k.Name or v, {})
+            end
+        end
+        local function beginCapture()
+            listening = true
+            captureCount = captureCount + 1
+            picker.Text = '...'
+            tween(picker, { BackgroundColor3 = theme.accent }, 0.15)
+        end
+        local function endCapture()
+            listening = false
+            if captureCount > 0 then captureCount = captureCount - 1 end
+            tween(picker, { BackgroundColor3 = theme.main2 }, 0.15)
+        end
+        picker.Activated:Connect(function()
+            beginCapture()
+        end)
+        UserInputService.InputBegan:Connect(function(input)
+            if not listening then return end
+            if input.KeyCode ~= Enum.KeyCode.Unknown then
+                captured = input.KeyCode
+                self._key = input.KeyCode
+                picker.Text = '[' .. input.KeyCode.Name .. ']'
+                endCapture()
+                if info.Changed then
+                    -- pass the clean name (not tostring(Enum)) so the saved
+                    -- key file stores 'LeftControl', which restores next run
+                    info.Changed(input.KeyCode.Name, {})
+                end
+            end
+        end)
+
+        Options[id] = self
+        return self
+    end
+
+    function GroupboxMeta:AddLabel(text)
+        _maybeYield()
+        local item = baseItem(self, 32)
+        local lbl = newFont(13)
+        lbl.Size = UDim2.new(1, 0, 0, 28)
+        lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.Text = text or ''
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = item._frame
+        item._lbl = lbl
+        item.SetText = function(_, t)
+            lbl.Text = tostring(t)
+        end
+        item.AddKeyPicker = function(_, id, info)
+            return keyPicker(item, id, info)
+        end
+        return item
+    end
+
+    -- bold section header (e.g. 'Bloxburg - 09/29/2026' inside an update log)
+    function GroupboxMeta:AddHeader(text)
+        _maybeYield()
+        -- 14px item: header text sits DIRECTLY on top of the next row
+        local item = baseItem(self, 14)
+        local lbl = newFont(14, true)
+        lbl.Size = UDim2.new(1, 0, 0, 14)
+        lbl.Position = UDim2.fromOffset(0, 0)
+        lbl.Text = text or ''
+        lbl.TextColor3 = theme.font
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = item._frame
+        item._lbl = lbl
+        item.SetText = function(_, t)
+            lbl.Text = tostring(t)
+        end
+        return item
+    end
+
+    -- auto-height wrapped paragraph with RichText enabled (color tags work:
+    -- '<font color="#7ee787">+ added</font>'). minHeight keeps ultra-short
+    -- paragraphs from collapsing; the frame grows with the text.
+    function GroupboxMeta:AddParagraph(text, minHeight)
+        _maybeYield()
+        local h = minHeight or 20
+        local f = _new('Frame')
+        f.Size = UDim2.new(1, 0, 0, h)
+        f.AutomaticSize = Enum.AutomaticSize.Y
+        f.BackgroundTransparency = 1
+        f.Parent = self._container
+        local item = { _h = h, _frame = f, _parent = self }
+        table.insert(self._items, item)
+        local lbl = newFont(13)
+        lbl.Size = UDim2.new(1, 0, 0, h)
+        lbl.AutomaticSize = Enum.AutomaticSize.Y
+        lbl.Position = UDim2.fromOffset(0, 0)
+        lbl.Text = text or ''
+        lbl.TextWrapped = true
+        lbl.RichText = true
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextYAlignment = Enum.TextYAlignment.Top
+        lbl.Parent = f
+        item._lbl = lbl
+        item.SetText = function(_, t)
+            lbl.Text = tostring(t)
+        end
+        return item
+    end
+
+    -- full-width row: truncated text on the left + [Copy] button on the
+    -- right. Copy goes through PongiUI.CopyFn when the host script provides
+    -- one, else setclipboard/toclipboard best-effort. The button flashes
+    -- 'Copied' for a moment.
+    function GroupboxMeta:AddCopyRow(text, opts)
+        _maybeYield()
+        opts = opts or {}
+        -- 26px item (was 34): the row is snug — text and button both 26px
+        local item = baseItem(self, 26)
+        local lbl = newFont(12)
+        -- label never runs under the button zone (right 80px reserved) so
+        -- long URLs truncate to '...' instead of forcing full width
+        lbl.Size = UDim2.new(1, -80, 0, 26)
+        lbl.Position = UDim2.fromOffset(0, 0)
+        lbl.Text = text or ''
+        -- links read as links: light blue
+        lbl.TextColor3 = Color3.fromRGB(126, 178, 255)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.Parent = item._frame
+        -- Copy button pinned to the very right side of the section; the
+        -- label reserves the last 80px and truncates its URL, so they never
+        -- collide at any window size
+        local btn = _new('TextButton')
+        btn.Size = UDim2.fromOffset(58, 22)
+        btn.Position = UDim2.new(1, -58, 0, 2)
+        btn.BackgroundColor3 = theme.main2
+        btn.BorderSizePixel = 0
+        btn.Text = opts.ButtonText or 'Copy'
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 12
+        btn.TextColor3 = theme.dim
+        btn.TextXAlignment = Enum.TextXAlignment.Center
+        corner(btn, 6)
+        stroke(btn, theme.outline, 1)
+        btn.Parent = item._frame
+        btn.MouseEnter:Connect(function()
+            tween(btn, { BackgroundColor3 = theme.accent }, 0.15)
+            btn.TextColor3 = Color3.new(1, 1, 1)
+        end)
+        btn.MouseLeave:Connect(function()
+            tween(btn, { BackgroundColor3 = theme.main2 }, 0.15)
+            btn.TextColor3 = theme.dim
+        end)
+        local flashTask = nil
+        btn.Activated:Connect(function()
+            local copied = false
+            if type(PongiUI.CopyFn) == 'function' then
+                local okC = pcall(PongiUI.CopyFn, text)
+                copied = okC
+            else
+                local g = (typeof(getgenv) == 'function' and getgenv()) or _G
+                if type(setclipboard) == 'function' then
+                    copied = pcall(setclipboard, text)
+                elseif type(g.setclipboard) == 'function' then
+                    copied = pcall(g.setclipboard, text)
+                elseif type(toclipboard) == 'function' then
+                    copied = pcall(toclipboard, text)
+                elseif type(g.toclipboard) == 'function' then
+                    copied = pcall(g.toclipboard, text)
+                end
+            end
+            btn.Text = copied and 'Copied' or 'Failed'
+            if flashTask then task.cancel(flashTask) end
+            flashTask = task.delay(1.2, function()
+                btn.Text = opts.ButtonText or 'Copy'
+                flashTask = nil
+            end)
+        end)
+        item._lbl = lbl
+        item._btn = btn
+        item.SetText = function(_, t)
+            lbl.Text = tostring(t)
+        end
+        return item
+    end
+
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- SPINNER â€” a rotating ring with chasing dots (the Build Status look).
+    --   local sp = PongiUI:CreateSpinner(24, color)   -> { Frame, SetBusy }
+    --   sp.Frame.Parent = someFrame
+    --   sp:SetBusy(true)  -- show + start spinning
+    --   sp:SetBusy(false) -- hide (the rotation chain stops itself)
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    function PongiUI:CreateSpinner(size, color)
+        local col = color or Color3.fromRGB(150, 100, 230)
+        local spinner = _new('Frame')
+        spinner.BackgroundTransparency = 1
+        spinner.Size = UDim2.fromOffset(size or 24, size or 24)
+        spinner.Visible = false
+        local ring = _new('Frame')
+        ring.Size = UDim2.new(1, 0, 1, 0)
+        ring.BackgroundTransparency = 1
+        ring.BorderSizePixel = 2.5
+        ring.BorderColor3 = col
+        _new('UICorner', ring).CornerRadius = UDim.new(1, 0)
+        ring.Parent = spinner
+        local SPIN_FADE = {0, 0.25, 0.5, 0.7, 0.8, 0.85, 0.85, 0.85, 0.85, 0.85}
+        -- the dots are moved every frame instead of rotating the FRAME itself:
+        -- tweening a frame's Rotation on 95% executors can detach it visually
+        -- from its parent (it keeps rendering outside the row when scrolled),
+        -- so the spinner stays a plain, always-clippable frame
+        local dots = {}
+        for i = 1, 10 do
+            local seg = _new('Frame')
+            seg.Size = UDim2.fromOffset(3, 3)
+            seg.AnchorPoint = Vector2.new(0.5, 0.5)
+            seg.BackgroundColor3 = col
+            seg.BackgroundTransparency = SPIN_FADE[i]
+            seg.BorderSizePixel = 0
+            _new('UICorner', seg).CornerRadius = UDim.new(1, 0)
+            seg.Parent = spinner
+            dots[i] = seg
+        end
+        local ang = 0
+        local spinning = false
+        local conn = nil
+        local function placeDots()
+            for i = 1, 10 do
+                local a = ang + math.rad((i - 1) * 36)
+                dots[i].Position = UDim2.new(0.5, math.sin(a) * 8.5, 0.5, -math.cos(a) * 8.5)
+            end
+        end
+        local function stopSpin()
+            spinning = false
+            if conn then conn:Disconnect(); conn = nil end
+        end
+        local function startSpin()
+            if spinning then return end
+            spinning = true
+            conn = game:GetService('RunService').Heartbeat:Connect(function(dt)
+                if not spinner or not spinner.Visible or not spinner.Parent then
+                    stopSpin()
+                    return
+                end
+                local old = setthreadidentity and getthreadidentity() or 8
+                if setthreadidentity then setthreadidentity(8) end
+                pcall(function()
+                    ang = ang + (dt or 0.016) * 4.5  -- ~0.8s per full turn
+                    placeDots()
+                end)
+                if setthreadidentity then setthreadidentity(old) end
+            end)
+        end
+        local obj = {
+            Frame = spinner,
+            SetBusy = function(_, busy)
+                spinner.Visible = busy
+                if busy then
+                    startSpin()
+                else
+                    stopSpin()
+                end
+            end,
+        }
+        PongiUI._spinners[#PongiUI._spinners + 1] = obj
+        return obj
+    end
+
+    function PongiUI:CreateLoading(info)
+        -- singleton: if a loading screen is already up (created by the loader),
+        -- reuse it instead of stacking a second one â€” the engine then drives
+        -- and destroys the very same screen
+        if PongiUI._activeLoading and PongiUI._activeLoading._overlay and PongiUI._activeLoading._overlay.Parent then
+            return PongiUI._activeLoading
+        end
+        LoadingActive = true
+        local overlay = _new('Frame')
+        overlay.Size = UDim2.new(1, 0, 1, 0)
+        overlay.BackgroundColor3 = theme.bg
+        overlay.BackgroundTransparency = 1
+        overlay.BorderSizePixel = 0
+        overlay.ZIndex = 100
+        overlay.Parent = ScreenGui
+
+        local box = _new('Frame')
+        box.Size = UDim2.fromOffset(340, 130)
+        box.AnchorPoint = Vector2.new(0.5, 0.5)
+        box.Position = UDim2.fromScale(0.5, 0.5)
+        box.BackgroundColor3 = theme.main
+        box.BorderSizePixel = 0
+        corner(box, 10)
+        stroke(box, theme.outline, 1)
+        box.ZIndex = 101
+        box.Parent = overlay
+
+        local logo = makeIcon(info.Icon or 'user', 46)
+        logo.Position = UDim2.fromOffset(18, 18)
+        logo.Parent = box
+
+        local title = newFont(18)
+        title.Size = UDim2.new(1, -80, 0, 24)
+        title.Position = UDim2.fromOffset(76, 14)
+        title.Text = info.Title or 'Loading'
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.ZIndex = 102
+        title.Parent = box
+
+        local msg = newFont(12)
+        msg.Size = UDim2.new(1, -80, 0, 16)
+        msg.Position = UDim2.fromOffset(76, 42)
+        msg.Text = 'Loading...'
+        msg.TextColor3 = theme.dim
+        msg.TextXAlignment = Enum.TextXAlignment.Left
+        msg.ZIndex = 102
+        msg.Parent = box
+
+        -- spinning loader next to the title (same look as the Build Status
+        -- spinner); it stops itself when the loading screen is destroyed
+        local loadSpin = PongiUI:CreateSpinner(22)
+        loadSpin.Frame.Position = UDim2.new(1, -44, 0, 16)
+        loadSpin.Frame.ZIndex = 102
+        loadSpin.Frame.Parent = box
+        loadSpin:SetBusy(true)
+
+        local barBg = _new('Frame')
+        barBg.Size = UDim2.new(1, -36, 0, 5)
+        barBg.Position = UDim2.fromOffset(18, 76)
+        barBg.BackgroundColor3 = theme.main2
+        barBg.BorderSizePixel = 0
+        corner(barBg, 3)
+        barBg.ZIndex = 102
+        barBg.Parent = box
+        local barFill = _new('Frame')
+        barFill.Size = UDim2.new(0, 0, 1, 0)
+        barFill.BackgroundColor3 = theme.accent
+        barFill.BorderSizePixel = 0
+        corner(barFill, 3)
+        barFill.Parent = barBg
+
+        local stepLbl = newFont(11)
+        stepLbl.Size = UDim2.new(1, -36, 0, 14)
+        stepLbl.Position = UDim2.fromOffset(18, 88)
+        stepLbl.Text = '0 / 10'
+        stepLbl.TextColor3 = theme.dim
+        stepLbl.TextXAlignment = Enum.TextXAlignment.Left
+        stepLbl.ZIndex = 102
+        stepLbl.Parent = box
+
+        local loading = {
+            _overlay = overlay,
+            _msg = msg,
+            _bar = barFill,
+            _step = stepLbl,
+            _total = 10,
+        }
+        PongiUI._activeLoading = loading
+        local LoadingMeta = {}
+        LoadingMeta.__index = LoadingMeta
+        function LoadingMeta:SetCurrentStep(i)
+            self._step.Text = tostring(i) .. ' / ' .. tostring(self._total)
+            tween(self._bar, { Size = UDim2.new(i / self._total, 0, 1, 0) }, 0.3)
+        end
+        function LoadingMeta:SetMessage(t)
+            self._msg.Text = tostring(t)
+        end
+        function LoadingMeta:SetTotalSteps(n)
+            self._total = n
+        end
+        function LoadingMeta:Destroy()
+            if PongiUI._activeLoading == self then
+                PongiUI._activeLoading = nil
+            end
+            LoadingActive = false
+            if MobileToggleBtn then MobileToggleBtn.Visible = true end
+            local o = self._overlay
+            local box = o:FindFirstChildOfClass('Frame')
+            pcall(function()
+                tween(o, { BackgroundTransparency = 1 }, 0.3)
+                if box then
+                    -- fade the box and everything in it too â€” no instant pop
+                    tween(box, { BackgroundTransparency = 1 }, 0.3)
+                    for _, g in ipairs(box:GetDescendants()) do
+                        if g:IsA('Frame') then tween(g, { BackgroundTransparency = 1 }, 0.3) end
+                        if g:IsA('TextLabel') then tween(g, { TextTransparency = 1 }, 0.3) end
+                        if g:IsA('ImageLabel') then tween(g, { ImageTransparency = 1 }, 0.3) end
+                        if g:IsA('UIStroke') then tween(g, { Transparency = 1 }, 0.3) end
+                    end
+                end
+            end)
+            task.delay(0.3, function()
+                o:Destroy()
+                -- strictly sequential: loading screen gone FIRST, then the
+                -- window fades in (they never overlap on screen)
+                if Window then
+                    pcall(function() Window:Toggle(true) end)
+                end
+            end)
+        end
+        loading.Continue = LoadingMeta.Destroy
+        return setmetatable(loading, LoadingMeta)
+    end
+
+    -- â”€â”€ key/license window â€” the auth layer calls this instead of building
+    -- its own box (same style as the loading screen: logo, title, status,
+    -- spinner + key input + Redeem; pop-in, drag strip, fade-out destroy) â”€â”€
+    function PongiUI:CreateKeyWindow(info)
+        info = info or {}
+        local sg = _new('ScreenGui')
+        sg.Name = randName()
+        sg:SetAttribute('PongihubAuth', true)
+        sg.ResetOnSpawn = false
+        sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        sg.Parent = CoreGui:FindFirstChild('RobloxGui') or CoreGui
+
+        -- NO fullscreen overlay: on mobile, a full-screen frame (even
+        -- transparent) consumes the touch hit-test, so Bloxburg's dynamic
+        -- joystick never spawns and the player is stuck. The overlay had
+        -- no function (no outside-click handler) â€” box goes straight in.
+        local box = _new('Frame', sg)
+        box.Size = UDim2.fromOffset(340, 172)
+        box.AnchorPoint = Vector2.new(0.5, 0.5)
+        box.Position = UDim2.fromScale(0.5, 0.5)
+        box.BackgroundColor3 = theme.main
+        box.BorderSizePixel = 0
+        corner(box, 10)
+        stroke(box, theme.outline, 1)
+
+        local logo = makeIcon(info.Icon or 'user', 46)
+        logo.Position = UDim2.fromOffset(18, 18)
+        logo.Parent = box
+        local title = newFont(18)
+        title.Size = UDim2.new(1, -80, 0, 24)
+        title.Position = UDim2.fromOffset(76, 14)
+        title.RichText = true
+        -- same [FREE]/[PREMIUM] coloring as the main window title (both grey)
+        title.Text = (info.Title or 'PongiHub')
+            :gsub('%[FREE%]', '<font color="#9d97b8">[FREE]</font>')
+            :gsub('%[PREMIUM%]', '<font color="#9d97b8">[PREMIUM]</font>')
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = box
+        local status = newFont(14)
+        status.Font = Enum.Font.Code  -- same font as the key input placeholder
+        status.Size = UDim2.new(1, -80, 0, 36)
+        status.Position = UDim2.fromOffset(76, 44)
+        status.TextWrapped = true  -- long errors wrap to a 2nd line instead of spilling out
+        status.TextYAlignment = Enum.TextYAlignment.Top  -- line 1 first, wraps to line 2 only if needed
+        status.Text = info.Status or 'Enter your license key'
+        status.TextColor3 = theme.font
+        status.TextXAlignment = Enum.TextXAlignment.Left
+        status.Parent = box
+        local spin = PongiUI:CreateSpinner(22)
+        spin.Frame.Position = UDim2.new(1, -44, 0, 16)
+        spin.Frame.Parent = box
+
+        local kb = _new('TextBox', box)
+        kb.Size = UDim2.new(1, -36, 0, 34)
+        kb.Position = UDim2.fromOffset(18, 80)
+        kb.BackgroundColor3 = theme.main2
+        kb.BorderSizePixel = 0
+        kb.Text = ''
+        kb.PlaceholderText = 'paste your key here'
+        kb.PlaceholderColor3 = theme.dim
+        kb.TextColor3 = theme.font
+        kb.Font = Enum.Font.Code
+        kb.TextSize = 16
+        kb.ClearTextOnFocus = false
+        corner(kb, theme.radius)
+        stroke(kb, theme.outline, 1)
+
+        -- Get Key opens the free-key site (left) / Redeem validates (right)
+        local getUrl = info.GetKeyUrl or 'https://pongihub-free.pongihub.workers.dev'
+        local function openGetKey()
+            local opened = false
+            if request_browser_url then
+                opened = pcall(request_browser_url, getUrl)
+            end
+            if not opened then
+                pcall(function()
+                    if setclipboard then setclipboard(getUrl) end
+                end)
+                status.Text = 'Link copied!'
+                status.TextColor3 = theme.font
+                task.delay(2, function()
+                    pcall(function()
+                        status.Text = info.Status or 'Enter your license key'
+                        status.TextColor3 = theme.font
+                    end)
+                end)
+            end
+        end
+        local btnGet = _new('TextButton', box)
+        btnGet.Size = UDim2.new(0.5, -22, 0, 34)
+        btnGet.Position = UDim2.fromOffset(18, 122)
+        btnGet.BackgroundColor3 = theme.main2
+        btnGet.BorderSizePixel = 0
+        btnGet.Text = 'Get Key'
+        btnGet.TextColor3 = theme.font
+        btnGet.Font = Enum.Font.Gotham
+        btnGet.TextSize = 14
+        corner(btnGet, theme.radius)
+        btnGet.MouseButton1Click:Connect(openGetKey)
+
+        local btn = _new('TextButton', box)
+        btn.Size = UDim2.new(0.5, -22, 0, 34)
+        btn.Position = UDim2.fromOffset(174, 122)
+        btn.BackgroundColor3 = theme.accent
+        btn.BorderSizePixel = 0
+        btn.Text = 'Redeem Key'
+        btn.TextColor3 = theme.white
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        corner(btn, theme.radius)
+        btn.MouseEnter:Connect(function()
+            if btn.Active then tween(btn, { BackgroundColor3 = theme.accent2 }, 0.15) end
+        end)
+        btn.MouseLeave:Connect(function()
+            if btn.Active then tween(btn, { BackgroundColor3 = theme.accent }, 0.15) end
+        end)
+        local function doRedeem()
+            local key = tostring(kb.Text):gsub('%s', ''):upper()
+            if key == '' then
+                status.Text = 'Enter your key'
+                status.TextColor3 = theme.red
+                return
+            end
+            if #key < 8 then
+                status.Text = 'Invalid key'
+                status.TextColor3 = theme.red
+                return
+            end
+            btn.Text = 'Redeeming...'
+            btn.BackgroundColor3 = theme.accent2
+            btn.Active = false
+            if info.onSubmit then info.onSubmit(key) end
+        end
+        btn.MouseButton1Click:Connect(doRedeem)
+        -- saved key: prefill the input box and auto-redeem so the library
+        -- window shows the "Redeemingâ€¦" state instead of the fallback box
+        if info.PrefillKey and #tostring(info.PrefillKey) >= 8 then
+            kb.Text = tostring(info.PrefillKey)
+            task.defer(doRedeem)
+        end
+
+        -- drag: menu pattern (top strip only)
+        local dragStrip = _new('Frame', box)
+        dragStrip.Size = UDim2.new(1, 0, 0, 70)
+        dragStrip.BackgroundTransparency = 1
+        dragStrip.BorderSizePixel = 0
+        local dragging = false
+        local dragOffset = Vector2.new(0, 0)
+        dragStrip.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                local p = input.Position
+                local anchor = box.AbsolutePosition + box.AbsoluteSize * box.AnchorPoint
+                dragOffset = Vector2.new(p.X, p.Y) - anchor
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            -- mobile fires BOTH MouseMovement AND Touch per finger move â€”
+            -- handle only one input type to avoid jitter
+            if dragging and (
+                (UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.Touch)
+                or (not UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.MouseMovement)
+            ) then
+                local p = input.Position
+                box.Position = UDim2.fromOffset(p.X - dragOffset.X, p.Y - dragOffset.Y)
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+
+        -- pop-in (same smooth feel as the loading screen reveal): every
+        -- element exists now â€” scale up AND fade everything in together, no
+        -- instant opaque box. Frames are left alone so the transparent drag
+        -- strip stays invisible.
+        box.Size = UDim2.fromOffset(340 * 0.9, 172 * 0.9)
+        box.BackgroundTransparency = 1
+        tween(box, { Size = UDim2.fromOffset(340, 172), BackgroundTransparency = 0 }, 0.25)
+        local openStroke = box:FindFirstChildOfClass('UIStroke')
+        if openStroke then tween(openStroke, { Transparency = 0 }, 0.25) end
+        for _, g in ipairs(box:GetDescendants()) do
+            if g:IsA('TextButton') or g:IsA('TextBox') then
+                g.TextTransparency = 1
+                g.BackgroundTransparency = 1
+                tween(g, { TextTransparency = 0, BackgroundTransparency = 0 }, 0.25)
+            elseif g:IsA('TextLabel') then
+                g.TextTransparency = 1
+                tween(g, { TextTransparency = 0 }, 0.25)
+            elseif g:IsA('ImageLabel') then
+                g.ImageTransparency = 1
+                tween(g, { ImageTransparency = 0 }, 0.25)
+            end
+        end
+
+        local handle = {}
+        function handle:SetStatus(t, c)
+            status.Text = tostring(t)
+            if c then status.TextColor3 = c end
+        end
+        function handle:SetKey(k)
+            kb.Text = tostring(k or '')
+        end
+        function handle:SetSpinning(on)
+            spin.Frame.Visible = on
+            spin:SetBusy(on)
+        end
+        function handle:SetBtnText(t)
+            btn.Text = tostring(t)
+        end
+        function handle:SetBtnActive(a)
+            btn.Active = a
+            if a then btn.BackgroundColor3 = theme.accent end
+        end
+        function handle:Destroy()
+            if not sg then return end
+            local s = sg
+            sg = nil
+            -- smooth close (same 0.3s feel as the loading screen): fade the
+            -- box AND every element together, shrink slightly, then destroy
+            pcall(function()
+                tween(box, { BackgroundTransparency = 1, Size = UDim2.fromOffset(340 * 0.92, 172 * 0.92) }, 0.3)
+                for _, g in ipairs(box:GetDescendants()) do
+                    if g:IsA('TextButton') or g:IsA('TextBox') then
+                        tween(g, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.3)
+                    elseif g:IsA('Frame') then
+                        tween(g, { BackgroundTransparency = 1 }, 0.3)
+                    elseif g:IsA('TextLabel') then
+                        tween(g, { TextTransparency = 1 }, 0.3)
+                    elseif g:IsA('ImageLabel') then
+                        tween(g, { ImageTransparency = 1 }, 0.3)
+                    elseif g:IsA('UIStroke') then
+                        tween(g, { Transparency = 1 }, 0.3)
+                    end
+                end
+            end)
+            task.delay(0.32, function()
+                pcall(function() s:Destroy() end)
+            end)
+        end
+        return handle
+    end
+
+    -- live icon-size tuning: resize ONLY the groupbox icon IMAGE on the fly,
+    -- and persist the choice for the next build via _G.PONGI_GROUPBOX_ICON_SIZE.
+    -- The 34px header row and title stay untouched. Call from a Settings input
+    -- while testing.
+    function PongiUI:SetGroupboxIconSize(n)
+        n = tonumber(n)
+        if not n or n < 14 or n > 48 then return false end
+        GROUPBOX_ICON_SIZE = math.floor(n)
+        if _G then _G.PONGI_GROUPBOX_ICON_SIZE = GROUPBOX_ICON_SIZE end
+        for _, e in ipairs(registeredGroupboxIcons) do
+            pcall(function()
+                if e.holder then
+                    e.holder.Size = UDim2.fromOffset(GROUPBOX_ICON_SIZE, GROUPBOX_ICON_SIZE)
+                    e.holder.Position = UDim2.fromOffset(10, math.max(0, (34 - GROUPBOX_ICON_SIZE) / 2))
+                    -- the inner image/text scales automatically (UDim2 1,-6)
+                end
+            end)
+        end
+        return true
+    end
+
+    function PongiUI:Notify(info)
+        info = info or {}
+        -- transparent wrapper sits in the notify stack (the UIListLayout owns
+        -- its position); the CARD slides inside the wrapper, so the layout
+        -- can never fight the slide animation
+        local holder = _new('Frame')
+        holder.Size = UDim2.fromOffset(300, 0)
+        holder.BackgroundTransparency = 1
+        holder.BorderSizePixel = 0
+        holder.ZIndex = 210
+        holder.Parent = NotifyArea
+
+        local card = _new('Frame')
+        card.Size = UDim2.new(1, 0, 0, 0)
+        card.BackgroundColor3 = theme.main
+        card.BorderSizePixel = 0
+        corner(card, 10)
+        stroke(card, theme.outline, 1)
+        card.ClipsDescendants = true
+        card.Parent = holder
+
+        -- roomy, balanced padding: the same top margin above the title and
+        -- bottom margin below the text (before the timer line)
+        local title = newFont(14)
+        title.Size = UDim2.new(1, -32, 0, 18)
+        title.Position = UDim2.fromOffset(16, 12)
+        title.Text = info.Title or ''
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = card
+        local desc = newFont(13)
+        desc.Size = UDim2.new(1, -32, 0, 0)
+        desc.Position = UDim2.fromOffset(16, 34)
+        desc.Text = info.Description or ''
+        desc.TextWrapped = true
+        desc.LineHeight = 1.15
+        desc.TextColor3 = theme.font
+        desc.TextXAlignment = Enum.TextXAlignment.Left
+        desc.TextYAlignment = Enum.TextYAlignment.Top
+        desc.Parent = card
+
+        -- TextBounds on a 0-height label does NOT wrap on this client (it
+        -- reports a single line), so the card would stay minimum-height and
+        -- ClipsDescendants would cut the wrapped lines. Measure the wrapped
+        -- text with TextService instead so the card always fits its text.
+        local innerW = 268
+        -- the label renders with LineHeight 1.15, but TextService:GetTextSize does
+        -- NOT apply LineHeight â€” so measured height under-counts the real wrapped
+        -- height and long texts get their last line(s) clipped by the card.
+        -- Scale the measured height by the label's LineHeight (+1px rounding
+        -- headroom) so the card always fits the full text.
+        local lineH = desc.LineHeight or 1
+        local bounds = TPS:GetTextSize(desc.Text, desc.TextSize, desc.Font, Vector2.new(innerW, 1000))
+        local h = math.max(76, 56 + math.ceil(bounds.Y * lineH) + 1)
+        holder.Size = UDim2.fromOffset(300, h)
+        card.Size = UDim2.new(1, 0, 0, h)
+        -- the desc needs a REAL height: a 0-height wrapped label does not
+        -- render every line on this client even when the card is tall
+        desc.Size = UDim2.new(1, -32, 0, math.max(20, h - 56))
+        -- re-measure once more after the first layout pass (fonts can settle
+        -- late); same TextService measurement, never the stale TextBounds
+        task.defer(function()
+            pcall(function()
+                local need = 56 + math.ceil(TPS:GetTextSize(desc.Text, desc.TextSize, desc.Font, Vector2.new(innerW, 1000)).Y * lineH) + 1
+                if need > h then
+                    h = need
+                    holder.Size = UDim2.fromOffset(300, h)
+                    card.Size = UDim2.new(1, 0, 0, h)
+                    desc.Size = UDim2.new(1, -32, 0, math.max(20, h - 56))
+                end
+            end)
+        end)
+        local t = info.Time or 3
+        -- the timer sits INSIDE the card: thin line with left/right/bottom
+        -- margins, full at open, drains left->right to nothing
+        local timerFill = _new('Frame')
+        timerFill.Size = UDim2.new(1, -16, 0, 2)
+        timerFill.Position = UDim2.new(0, 8, 1, -8)
+        timerFill.BackgroundColor3 = theme.accent
+        timerFill.BorderSizePixel = 0
+        corner(timerFill, 1)
+        timerFill.Parent = card
+
+        -- open: slide in from off-screen right + fade the card in (2.1x speed)
+        card.BackgroundTransparency = 1
+        card.Position = UDim2.fromOffset(320, 0)
+        tween(card, { BackgroundTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.17)
+        -- countdown: full -> empty, Linear over the whole duration
+        tween(timerFill, { Size = UDim2.new(0, 0, 0, 2) }, t, Enum.EasingStyle.Linear)
+        task.delay(t + 0.1, function()
+            -- close: slide out with the card AND its text fading together
+            pcall(function()
+                tween(card, { BackgroundTransparency = 1 }, 0.14)
+                tween(title, { TextTransparency = 1 }, 0.14)
+                tween(desc, { TextTransparency = 1 }, 0.14)
+                tween(timerFill, { BackgroundTransparency = 1 }, 0.14)
+                local hs = card:FindFirstChildOfClass('UIStroke')
+                if hs then tween(hs, { Transparency = 1 }, 0.14) end
+            end)
+            tween(card, { Position = UDim2.fromOffset(320, 0) }, 0.14)
+            task.delay(0.18, function()
+                holder:Destroy()
+            end)
+        end)
+        return holder
+    end
+
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- AUTO FARM STATUS DRIVER (library-side takeover)
+    -- The engine's AutoFarm.getStatus() (via getBM -> setupvalue) strips the
+    -- CALLING thread's Plugin capability: after the first call that thread can
+    -- no longer touch Instances ("cannot access 'Instance' (lacking capability
+    -- Plugin)"). The main script's own refresh loop calls getStatus and then
+    -- writes the labels in the SAME thread, so every write fails silently
+    -- inside its pcalls and the status stays frozen at the initial values.
+    -- Verified live on Real (2026-08-14): getStatus works; label writes after
+    -- it die with the capability error; writes BEFORE any getStatus work; a
+    -- thread that only calls getStatus keeps working forever.
+    -- Fix: a WORKER thread calls getStatus and stashes the snapshot; the MAIN
+    -- thread only writes the UI (never calls getStatus). Library-only, so the
+    -- obfuscated main script does not need to change.
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    do
+        local function fmtMoney(n)
+            local s = tostring(math.floor(tonumber(n) or 0))
+            local out = s:reverse():gsub('(%d%d%d)', '%1,'):reverse()
+            return out:gsub('^,', '')
+        end
+        local function fmtDur(sec)
+            sec = math.max(0, math.floor(tonumber(sec) or 0))
+            return string.format('%02d:%02d:%02d',
+                math.floor(sec / 3600), math.floor((sec % 3600) / 60), sec % 60)
+        end
+        local function findHub()
+            for _, g in ipairs(CoreGui:GetDescendants()) do
+                if g:IsA('ScreenGui') and g:GetAttribute('PongihubUI') then return g end
+            end
+            return nil
+        end
+        local function resolve(hub)
+            local head, gb = nil, nil
+            for _, d in ipairs(hub:GetDescendants()) do
+                if d:IsA('TextLabel') and d.Text == 'Status' and d.TextSize >= 14 then
+                    head = d.Parent
+                    gb = head and head.Parent
+                    break
+                end
+            end
+            if not gb then return nil end
+            local container = nil
+            for _, c in ipairs(gb:GetChildren()) do
+                if c:IsA('Frame') and c ~= head then container = c end
+            end
+            if not container then return nil end
+            local earnedL, totalL, sessionL, actionL, spinF = nil, nil, nil, nil, nil
+            for _, d in ipairs(container:GetDescendants()) do
+                if d:IsA('TextLabel') then
+                    local t = d.Text or ''
+                    if t:match('^Earned:') then earnedL = d
+                    elseif t:match('^Total:') then totalL = d
+                    elseif t:match('^Session:') then sessionL = d
+                    elseif d.TextTruncate == Enum.TextTruncate.AtEnd and d.TextSize <= 13 then actionL = d end
+                elseif d:IsA('Frame') then
+                    local n = 0
+                    for _, k in ipairs(d:GetChildren()) do
+                        if k:IsA('Frame') and k.Size and k.Size.X and k.Size.X.Offset and k.Size.X.Offset <= 4 then
+                            n = n + 1
+                        end
+                    end
+                    if n >= 8 then spinF = d end
+                end
+            end
+            if not (earnedL and totalL and sessionL and actionL and spinF) then return nil end
+            local spinEntry = nil
+            for _, s in ipairs(PongiUI._spinners) do
+                if s.Frame == spinF then spinEntry = s; break end
+            end
+            return {
+                earnedL = earnedL, totalL = totalL, sessionL = sessionL,
+                actionL = actionL, spinF = spinF, spinEntry = spinEntry,
+            }
+        end
+        -- one driver for the whole session; survives re-execution because the
+        -- next tick re-resolves to the freshly built hub (cleanStale destroys
+        -- the old one, so findHub always sees the current hub). Versioned so a
+        -- driver from an older library build (no fallback spin) is replaced on
+        -- the next load instead of blocking the fixed one forever.
+        if _G.__PONGI_STATUS_DRIVER__ ~= 'v2' then
+            _G.__PONGI_STATUS_DRIVER__ = 'v2'
+            task.spawn(function()
+                local shared = {
+                    got = false, earned = 0, total = 0, session = 0,
+                    status = 'Idle', active = false,
+                }
+                -- WORKER: the only thread allowed to call getStatus (it gets
+                -- poisoned, but only ever calls getStatus, which keeps working).
+                -- IMPORTANT: gated on the hub existing. getStatus -> getMoney
+                -- -> getBM does setupvalue on the game's build remotes, which
+                -- the engine only does once it is actually building. Running it
+                -- during the key/auth phase (the PongihubAuth window shows
+                -- BEFORE the hub) or any pre-hub phase corrupts that state for
+                -- the whole session and is what broke the key/license window.
+                -- The worker stays silent until the hub is up.
+                -- cached hub ref: scan CoreGui ONCE when the hub appears and
+                -- keep the ref until it is destroyed, instead of rescanning all
+                -- of CoreGui every 0.5s forever (that is real per-tick cost on
+                -- weak devices and was felt as "laggy after load").
+                local hubRef = nil
+                local function checkHub()
+                    if hubRef and hubRef.Parent then return hubRef end
+                    hubRef = nil
+                    for _, g in ipairs(CoreGui:GetDescendants()) do
+                        if g:IsA('ScreenGui') and g:GetAttribute('PongihubUI') then
+                            hubRef = g
+                            break
+                        end
+                    end
+                    return hubRef
+                end
+                task.spawn(function()
+                    while true do
+                        task.wait(0.5)
+                        local hubUp = checkHub() ~= nil
+                        if not hubUp then
+                            shared.got = false
+                        else
+                            local env = getgenv and getgenv() or _G
+                            local af = env.PONGIHUB_AUTOFARM or _G.PONGIHUB_AUTOFARM
+                            if af and af.getStatus then
+                                local ok, st = pcall(function() return af.getStatus() end)
+                                if ok and st then
+                                    shared.got = true
+                                    shared.earned = st.earned or 0
+                                    shared.total = st.total or 0
+                                    shared.session = st.session or 0
+                                    shared.status = st.status or 'Idle'
+                                    shared.active = st.active or false
+                                end
+                            end
+                        end
+                    end
+                end)
+                -- MAIN: only writes UI, never calls getStatus
+                local cur = nil
+                local mainHub = nil
+                while true do
+                    task.wait(0.5)
+                    pcall(function()
+                        -- cached hub (same as worker) â€” only rescans when the
+                        -- hub is destroyed (re-execution, cleanStale)
+                        if mainHub and mainHub.Parent then
+                            -- keep
+                        else
+                            mainHub = nil
+                            for _, g in ipairs(CoreGui:GetDescendants()) do
+                                if g:IsA('ScreenGui') and g:GetAttribute('PongihubUI') then
+                                    mainHub = g
+                                    break
+                                end
+                            end
+                        end
+                        local hub = mainHub
+                        if not hub then cur = nil; return end
+                        if not cur or cur.earnedL.Parent == nil then cur = resolve(hub) end
+                        if not cur or not shared.got then return end
+                        local e, t, s = fmtMoney(shared.earned), fmtMoney(shared.total), fmtDur(shared.session)
+                        if cur.earnedL.Text ~= 'Earned: $' .. e then cur.earnedL.Text = 'Earned: $' .. e end
+                        if cur.totalL.Text ~= 'Total: $' .. t then cur.totalL.Text = 'Total: $' .. t end
+                        if cur.sessionL.Text ~= 'Session: ' .. s then cur.sessionL.Text = 'Session: ' .. s end
+                        if cur.actionL.Text ~= shared.status then cur.actionL.Text = shared.status end
+                        if cur.spinEntry then
+                            cur.spinEntry:SetBusy(shared.active)
+                        elseif cur.spinF then
+                            -- fallback: spin the dots ourselves (same orbit math
+                            -- as CreateSpinner) so the Auto Farm spinner animates
+                            -- like the Build Status one even when the spinner
+                            -- object can't be matched from the registry
+                            cur.spinF.Visible = shared.active
+                            if shared.active then
+                                if not cur._conn then
+                                    local ang = 0
+                                    cur._conn = RunService.Heartbeat:Connect(function(dt)
+                                        if not cur or not cur.spinF or not cur.spinF.Parent or not cur.spinF.Visible then
+                                            if cur and cur._conn then cur._conn:Disconnect(); cur._conn = nil end
+                                            return
+                                        end
+                                        ang = ang + (dt or 0.016) * 4.5
+                                        local n = 0
+                                        for _, k in ipairs(cur.spinF:GetChildren()) do
+                                            if k:IsA('Frame') and k.Size and k.Size.X and k.Size.X.Offset and k.Size.X.Offset <= 4 then
+                                                n = n + 1
+                                                local a = ang + math.rad((n - 1) * 36)
+                                                k.Position = UDim2.new(0.5, math.sin(a) * 8.5, 0.5, -math.cos(a) * 8.5)
+                                            end
+                                        end
+                                    end)
+                                end
+                            elseif cur._conn then
+                                cur._conn:Disconnect()
+                                cur._conn = nil
+                            end
+                        end
+                        -- mirror the main script's recenterAFStatus: slide the
+                        -- action text right when the spinner is showing
+                        local x = cur.actionL.Position.X.Offset
+                        if shared.active and x <= 10 then
+                            cur.actionL.Position = UDim2.new(0, 30, 0, 4)
+                            cur.actionL.Size = UDim2.new(1, -36, 0, 14)
+                        elseif not shared.active and x >= 20 then
+                            cur.actionL.Position = UDim2.new(0, 4, 0, 4)
+                            cur.actionL.Size = UDim2.new(1, -8, 0, 14)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+
+    return PongiUI
