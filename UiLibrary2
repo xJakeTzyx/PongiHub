@@ -417,11 +417,20 @@
         body.Parent = root
 
         -- banner host: full-width strip ABOVE the left/right columns. Tabs
-        -- with a banner push the columns down while they are active.
+        -- with a banner push the columns down while they are active. The
+        -- host itself owns the top breathing room (14px) so the welcome
+        -- never sits flush against the tab divider.
         local bannerHost = _new('Frame')
         bannerHost.Size = UDim2.new(1, 0, 0, 0)
+        bannerHost.AutomaticSize = Enum.AutomaticSize.Y
         bannerHost.BackgroundTransparency = 1
         bannerHost.Parent = body
+        local bannerHostPad = _new('UIPadding')
+        bannerHostPad.PaddingTop = UDim.new(0, 14)
+        bannerHostPad.PaddingBottom = UDim.new(0, 4)
+        bannerHostPad.PaddingLeft = UDim.new(0, 2)
+        bannerHostPad.PaddingRight = UDim.new(0, 2)
+        bannerHostPad.Parent = bannerHost
 
         local left = _new('Frame')
         left.Size = UDim2.new(0.5, -7, 1, 0)
@@ -2105,8 +2114,9 @@ b.Activated:Connect(function()
     -- bold section header (e.g. 'Bloxburg - 09/29/2026' inside an update log)
     function GroupboxMeta:AddHeader(text)
         _maybeYield()
-        -- 14px item: header text sits DIRECTLY on top of the next row
-        local item = baseItem(self, 14)
+        -- 14px text item + a 2px breathing frame under it: the next row's
+        -- label starts close but not glued to the header text
+        local item = baseItem(self, 16)
         local lbl = newFont(14, true)
         lbl.Size = UDim2.new(1, 0, 0, 14)
         lbl.Position = UDim2.fromOffset(0, 0)
