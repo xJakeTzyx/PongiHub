@@ -1468,7 +1468,17 @@ b.Activated:Connect(function()
         -- re-parent everything currently in the container into a new
         -- ScrollingFrame that replaces the container in the list
         local sf = _new('ScrollingFrame')
-        sf.Size = UDim2.new(1, 0, 0, height)
+        if height == 'fill' then
+            -- FILL MODE: the groupbox fills its whole column (minus the
+            -- canvas padding) and the inner scroll takes what's left under
+            -- the head — so the box grows/shrinks with the window and the
+            -- OUTER column never needs a scrollbar
+            gb.Size = UDim2.new(1, 0, 1, -10)
+            gb.AutomaticSize = Enum.AutomaticSize.None
+            sf.Size = UDim2.new(1, 0, 1, -34)  -- minus the 34px groupbox head
+        else
+            sf.Size = UDim2.new(1, 0, 0, height)
+        end
         sf.BackgroundTransparency = 1
         sf.BorderSizePixel = 0
         sf.ScrollBarThickness = 4
