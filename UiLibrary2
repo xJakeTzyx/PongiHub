@@ -2158,6 +2158,10 @@ b.Activated:Connect(function()
         local f = _new('Frame')
         f.Size = UDim2.new(1, 0, 0, h)
         f.BackgroundTransparency = 1
+        -- clip: during window resize the TextBounds sync lags one frame and
+        -- the label is briefly taller than the frame — without clipping that
+        -- text draws over the next row / outside the section
+        f.ClipsDescendants = true
         f.Parent = self._container
         local item = { _h = h, _frame = f, _parent = self }
         table.insert(self._items, item)
