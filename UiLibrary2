@@ -3026,4 +3026,11 @@ b.Activated:Connect(function()
         end
     end
 
+    -- version marker: the main script's cache check requires this function,
+    -- so a library cached by an OLDER script run (without it) is re-fetched
+    -- instead of reused. Bump the name when the component set changes.
+    function PongiUI.AddBannerComponent()
+        return true
+    end
+
     return PongiUI
