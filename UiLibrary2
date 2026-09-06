@@ -1508,6 +1508,11 @@ b.Activated:Connect(function()
                 ch.Parent = sf
             end
         end
+        -- KILL the old container: even empty it keeps 8px of padding, which
+        -- pushes the scroll frame below the groupbox's bottom border — text
+        -- visibly pokes outside the box line on fill mode
+        container.Visible = false
+        container.Parent = nil
         -- future items land in sf: baseItem parents to groupbox._container,
         -- so swap the container reference to the scroll frame
         self._container = sf
