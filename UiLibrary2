@@ -749,6 +749,7 @@
         btn.Font = DEFAULT_FONT
         btn.TextSize = 13
         btn.TextColor3 = theme.font
+        btn.TextTruncate = Enum.TextTruncate.AtEnd
         btn.TextXAlignment = Enum.TextXAlignment.Center
         corner(btn, 7)
         local btnStroke = stroke(btn, theme.outline, 1)
@@ -1413,6 +1414,7 @@ b.Activated:Connect(function()
         local title = newFont(15)
         title.Size = UDim2.new(1, -36, 0, 22)
         title.Position = UDim2.fromOffset(icon and 46 or 12, 6)
+        title.TextTruncate = Enum.TextTruncate.AtEnd
         title.Text = name or 'Groupbox'
         title.TextXAlignment = Enum.TextXAlignment.Left
         title.Parent = head
@@ -1600,6 +1602,7 @@ b.Activated:Connect(function()
         local lbl = newFont(13)
         lbl.Size = UDim2.new(1, -52, 0, 30)
         lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.Text = info.Text or 'Toggle'
         lbl.TextColor3 = theme.dim
         lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1670,6 +1673,7 @@ b.Activated:Connect(function()
         local lbl = newFont(12)
         lbl.Size = UDim2.new(1, 0, 0, 16)
         lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.Text = info.Text or 'Input'
         lbl.TextColor3 = Color3.new(1, 1, 1)
         lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -2128,6 +2132,7 @@ b.Activated:Connect(function()
         local lbl = newFont(13)
         lbl.Size = UDim2.new(1, 0, 0, 28)
         lbl.Position = UDim2.fromOffset(0, 2)
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.Text = text or ''
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = item._frame
