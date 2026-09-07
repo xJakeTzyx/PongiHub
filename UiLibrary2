@@ -205,14 +205,16 @@
         return s
     end
 
+    -- the hub's default typeface — everything built through newFont uses it
+    local DEFAULT_FONT = Enum.Font.GothamBold
     local function newFont(size, bold)
         local l = _new('TextLabel')
-        l.Font = Enum.Font.Gotham
+        l.Font = DEFAULT_FONT
         l.TextSize = size or 14
         l.TextColor3 = theme.font
         l.BackgroundTransparency = 1
         l.BorderSizePixel = 0
-        if bold then l.Font = Enum.Font.GothamBold end
+        if bold then l.Font = DEFAULT_FONT end
         return l
     end
 
@@ -744,7 +746,7 @@
         btn.BackgroundColor3 = theme.main2
         btn.BorderSizePixel = 0
         btn.Text = name
-        btn.Font = Enum.Font.Gotham
+        btn.Font = DEFAULT_FONT
         btn.TextSize = 13
         btn.TextColor3 = theme.font
         btn.TextXAlignment = Enum.TextXAlignment.Center
@@ -1101,7 +1103,7 @@
             b.BackgroundColor3 = btnInfo.Variant == 'Secondary' and theme.main2 or theme.accent
             b.BorderSizePixel = 0
             b.Text = btnInfo.Title or 'Button'
-            b.Font = Enum.Font.Gotham
+            b.Font = DEFAULT_FONT
             b.TextSize = 12
             b.TextColor3 = btnInfo.Variant == 'Secondary' and theme.font or Color3.new(1, 1, 1)
             corner(b, 7)
@@ -1565,7 +1567,7 @@ b.Activated:Connect(function()
         b.BackgroundColor3 = theme.main2
         b.BorderSizePixel = 0
         b.Text = info.Text or 'Button'
-        b.Font = Enum.Font.Gotham
+        b.Font = DEFAULT_FONT
         b.TextSize = 13
         b.TextColor3 = theme.dim
         b.TextXAlignment = Enum.TextXAlignment.Center
@@ -1678,7 +1680,7 @@ b.Activated:Connect(function()
         box.BackgroundColor3 = theme.main2
         box.BorderSizePixel = 0
         box.PlaceholderText = ''
-        box.Font = Enum.Font.Gotham
+        box.Font = DEFAULT_FONT
         box.TextSize = 13
         box.TextColor3 = Color3.new(1, 1, 1)
         box.TextXAlignment = Enum.TextXAlignment.Left
@@ -1745,7 +1747,7 @@ b.Activated:Connect(function()
         display.BackgroundColor3 = theme.bg
         display.BorderSizePixel = 0
         display.Text = '  ' .. current
-        display.Font = Enum.Font.Gotham
+        display.Font = DEFAULT_FONT
         display.TextSize = 13
         display.TextColor3 = Color3.new(1, 1, 1)
         display.TextXAlignment = Enum.TextXAlignment.Left
@@ -1807,7 +1809,7 @@ b.Activated:Connect(function()
         searchBox.PlaceholderColor3 = theme.dim
         searchBox.Text = ''
         searchBox.TextColor3 = Color3.new(1, 1, 1)
-        searchBox.Font = Enum.Font.Gotham
+        searchBox.Font = DEFAULT_FONT
         searchBox.TextSize = 13
         searchBox.TextXAlignment = Enum.TextXAlignment.Left
         searchBox.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1897,7 +1899,7 @@ b.Activated:Connect(function()
                 opt.BorderSizePixel = 0
                 corner(opt, 6)
                 opt.Text = '   ' .. tostring(v)
-                opt.Font = Enum.Font.Gotham
+                opt.Font = DEFAULT_FONT
                 opt.TextSize = 13
                 opt.TextColor3 = v == current and theme.accent or theme.font
                 opt.TextXAlignment = Enum.TextXAlignment.Left
@@ -2060,7 +2062,7 @@ b.Activated:Connect(function()
         picker.BackgroundColor3 = theme.main2
         picker.BorderSizePixel = 0
         picker.TextTruncate = Enum.TextTruncate.AtEnd
-        picker.Font = Enum.Font.Gotham
+        picker.Font = DEFAULT_FONT
         picker.TextSize = 12
         picker.TextColor3 = theme.font
         corner(picker, 6)
@@ -2238,7 +2240,7 @@ b.Activated:Connect(function()
         btn.BackgroundColor3 = theme.main2
         btn.BorderSizePixel = 0
         btn.Text = opts.ButtonText or 'Copy'
-        btn.Font = Enum.Font.Gotham
+        btn.Font = DEFAULT_FONT
         btn.TextSize = 12
         btn.TextColor3 = theme.dim
         btn.TextXAlignment = Enum.TextXAlignment.Center
@@ -2597,7 +2599,7 @@ b.Activated:Connect(function()
         btnGet.BorderSizePixel = 0
         btnGet.Text = 'Get Key'
         btnGet.TextColor3 = theme.font
-        btnGet.Font = Enum.Font.Gotham
+        btnGet.Font = DEFAULT_FONT
         btnGet.TextSize = 14
         corner(btnGet, theme.radius)
         btnGet.MouseButton1Click:Connect(openGetKey)
@@ -2609,7 +2611,7 @@ b.Activated:Connect(function()
         btn.BorderSizePixel = 0
         btn.Text = 'Redeem Key'
         btn.TextColor3 = theme.white
-        btn.Font = Enum.Font.Gotham
+        btn.Font = DEFAULT_FONT
         btn.TextSize = 14
         corner(btn, theme.radius)
         btn.MouseEnter:Connect(function()
