@@ -338,8 +338,8 @@
         -- Desktop keeps the full size.
         local mobile = UserInputService.TouchEnabled
         -- desktop: width 620 -> ~558 (-10%), height 515
-        local INIT_W, INIT_H = mobile and 465 or 558, mobile and 286 or 515
-        local MIN_W, MIN_H = mobile and 330 or 420, mobile and 180 or 360
+        local INIT_W, INIT_H = mobile and 465 or 477, mobile and 286 or 515
+        local MIN_W, MIN_H = mobile and 330 or 340, mobile and 180 or 360
         local root = _new('Frame')
         root.Name = 'Main'
         root.Size = UDim2.fromOffset(INIT_W, INIT_H)
@@ -350,6 +350,25 @@
         corner(root, 10)
         stroke(root, theme.outline, 1)
         root.Parent = ScreenGui
+        -- MOVING GRADIENT: purple -> dark purple drifting across the window.
+        -- A UIGradient rotates slowly on the ROOT behind all sections.
+        pcall(function()
+            local grad = _new('UIGradient')
+            grad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(58, 34, 102)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(30, 18, 58)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 9, 32)),
+            })
+            grad.Rotation = 115
+            grad.Parent = root
+            local angle = 115
+            game:GetService('RunService').Heartbeat:Connect(function(dt)
+                if not root.Parent then return end
+                angle = angle + dt * 8
+                if angle > 360 then angle = angle - 360 end
+                grad.Rotation = angle
+            end)
+        end)
         if LoadingActive then root.Visible = false end
 
         -- compact top bar: the smallest height that still fits the icon
@@ -1413,6 +1432,7 @@ b.Activated:Connect(function()
         gb.Size = UDim2.new(1, 0, 0, 0)
         gb.AutomaticSize = Enum.AutomaticSize.Y
         gb.BackgroundColor3 = theme.bg
+        gb.BackgroundTransparency = 0.25
         gb.BorderSizePixel = 0
         corner(gb, 8)
         stroke(gb, theme.outline, 1)
