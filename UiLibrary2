@@ -330,9 +330,9 @@
         -- user can still drag it bigger/smaller with the same resize handle.
         -- Desktop keeps the full size.
         local mobile = UserInputService.TouchEnabled
-        -- desktop height 572 -> ~515 (-10%)
-        local INIT_W, INIT_H = mobile and 465 or 620, mobile and 286 or 515
-        local MIN_W, MIN_H = mobile and 330 or 440, mobile and 180 or 360
+        -- desktop: width 620 -> ~558 (-10%), height 515
+        local INIT_W, INIT_H = mobile and 465 or 558, mobile and 286 or 515
+        local MIN_W, MIN_H = mobile and 330 or 420, mobile and 180 or 360
         local root = _new('Frame')
         root.Name = 'Main'
         root.Size = UDim2.fromOffset(INIT_W, INIT_H)
@@ -2134,17 +2134,18 @@ b.Activated:Connect(function()
         return item
     end
 
-    -- bold section header (e.g. 'Bloxburg - 09/29/2026' inside an update log)
+    -- section header (e.g. 'Bloxburg - 09/29/2026' inside an update log) —
+    -- regular weight, slightly brighter than body text
     function GroupboxMeta:AddHeader(text)
         _maybeYield()
         -- 14px text item + a 2px breathing frame under it: the next row's
         -- label starts close but not glued to the header text
         local item = baseItem(self, 16)
-        local lbl = newFont(14, true)
+        local lbl = newFont(13)
         lbl.Size = UDim2.new(1, 0, 0, 14)
         lbl.Position = UDim2.fromOffset(0, 0)
         lbl.Text = text or ''
-        lbl.TextColor3 = theme.font
+        lbl.TextColor3 = Color3.fromRGB(210, 210, 225)
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = item._frame
         item._lbl = lbl
