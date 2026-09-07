@@ -1485,11 +1485,6 @@ b.Activated:Connect(function()
             gb.Size = UDim2.new(1, 0, 1, -10)
             gb.AutomaticSize = Enum.AutomaticSize.None
             sf.Size = UDim2.new(1, 0, 1, -34)  -- minus the 34px groupbox head
-            -- never let the box collapse to nothing (short windows / layout
-            -- hiccups): 160px minimum content area
-            local gbConstraint = _new('UISizeConstraint')
-            gbConstraint.MinSize = Vector2.new(0, 194)
-            gbConstraint.Parent = gb
         else
             sf.Size = UDim2.new(1, 0, 0, height)
         end
@@ -1688,6 +1683,8 @@ b.Activated:Connect(function()
         box.TextSize = 13
         box.TextColor3 = Color3.new(1, 1, 1)
         box.TextXAlignment = Enum.TextXAlignment.Left
+        box.TextTruncate = Enum.TextTruncate.AtEnd
+        box.ClearTextOnFocus = false
         corner(box, 7)
         stroke(box, theme.outline, 1)
         box.Parent = item._frame
