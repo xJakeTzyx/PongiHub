@@ -415,6 +415,7 @@
 
         local logo = makeIcon(info.Icon or 'user', 36)
         logo.Position = UDim2.fromOffset(14, 4)
+        logo.ZIndex = 61  -- above the corner-cover strip so the icon never clips
         logo.Parent = top
         -- title bar: main name centered, tier badge right after it ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the
         -- badge is SMALLER and the same grey for BOTH tiers (uniform; the
