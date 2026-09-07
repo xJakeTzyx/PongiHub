@@ -483,22 +483,41 @@
             end
         end)
 
-        -- resize grip: hold the bottom-right corner dots and drag to resize
-        -- (mouse AND touch ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â this is the mobile resize handle)
-        local grip = _new('Frame')
-        grip.Size = UDim2.fromOffset(18, 18)
-        grip.Position = UDim2.new(1, -24, 1, -24)
+        -- resize grip: hold the bottom-right corner and drag to resize
+        -- (mouse AND touch — this is the mobile resize handle). Diagonal
+        -- dots stepping TOWARD the corner, subtle at rest, brighter on hover
+        local grip = _new('TextButton')
+        grip.Size = UDim2.fromOffset(26, 26)
+        grip.Position = UDim2.new(1, -30, 1, -30)
         grip.BackgroundTransparency = 1
         grip.ZIndex = 5
+        grip.Text = ''
+        grip.AutoButtonColor = false
         grip.Parent = root
+        local gripDots = {}
         for i = 0, 2 do
             local d = _new('Frame')
-            d.Size = UDim2.fromOffset(4, 4)
-            d.Position = UDim2.fromOffset(14 - i * 6, 14 - i * 6)
+            d.Size = UDim2.fromOffset(5, 5)
+            d.Position = UDim2.fromOffset(16 - i * 6, 16 - i * 6)
             d.BackgroundColor3 = theme.dim
+            d.BackgroundTransparency = 0.35
             d.BorderSizePixel = 0
+            _new('UICorner', d).CornerRadius = UDim.new(1, 0)
             d.Parent = grip
+            gripDots[i] = d
         end
+        grip.MouseEnter:Connect(function()
+            for _, d in ipairs(gripDots) do
+                d.BackgroundColor3 = theme.accent
+                d.BackgroundTransparency = 0
+            end
+        end)
+        grip.MouseLeave:Connect(function()
+            for _, d in ipairs(gripDots) do
+                d.BackgroundColor3 = theme.dim
+                d.BackgroundTransparency = 0.35
+            end
+        end)
         local resizing = false
         grip.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
