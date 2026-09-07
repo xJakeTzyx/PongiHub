@@ -206,15 +206,15 @@
     end
 
     -- the hub's default typeface ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â everything built through newFont uses it
-    local DEFAULT_FONT = Enum.Font.GothamBold
+    local DEFAULT_FONT = Enum.Font.GothamMedium
+    local BOLD_FONT = Enum.Font.GothamBold
     local function newFont(size, bold)
         local l = _new('TextLabel')
-        l.Font = DEFAULT_FONT
+        l.Font = bold and BOLD_FONT or DEFAULT_FONT
         l.TextSize = size or 14
         l.TextColor3 = theme.font
         l.BackgroundTransparency = 1
         l.BorderSizePixel = 0
-        if bold then l.Font = DEFAULT_FONT end
         return l
     end
 
@@ -2878,7 +2878,7 @@ b.Activated:Connect(function()
 
         -- roomy, balanced padding: the same top margin above the title and
         -- bottom margin below the text (before the timer line)
-        local title = newFont(14)
+        local title = newFont(14, true)
         title.Size = UDim2.new(1, -32, 0, 18)
         title.Position = UDim2.fromOffset(16, 12)
         title.Text = info.Title or ''
